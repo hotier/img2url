@@ -1,0 +1,23 @@
+name = "img2url-worker"
+main = "worker/src/index.ts"
+compatibility_date = "2024-01-01"
+
+[triggers]
+crons = ["0 2 * * *"]  # 每天凌晨 2 点清理过期图片
+
+# R2 绑定
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "img2url-images"
+
+# KV 绑定
+[[kv_namespaces]]
+binding = "IMG_EXPIRY"
+id = "55ba208e3c4a47d28cf08bdbc5849d79"
+
+# 环境变量
+[vars]
+CORS_ORIGIN = "*"
+CUSTOM_DOMAIN = "https://api.hotier.cc.cd"
+TURNSTILE_SITE_KEY = "0x4AAAAAACasWM4vLebpu_B7"
+TURNSTILE_SECRET_KEY = "0x4AAAAAACasWBOpTvR1J0Q-w9omxQIevB4"
