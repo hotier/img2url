@@ -1,3 +1,22 @@
+// 常量定义
+const CONSTANTS = {
+  MAX_FILE_SIZE: 10 * 1024 * 1024, // 10MB
+  MAX_IMAGE_WIDTH: 10000,
+  MAX_IMAGE_HEIGHT: 10000,
+  MAX_UPLOADS_PER_DAY: 500,
+  MAX_UPLOADS_PER_MINUTE: 30,
+  MAX_READS_PER_MINUTE: 100,
+  CAPTCHA_UPLOAD_THRESHOLD: 300,
+  CAPTCHA_UPLOAD_INTERVAL: 50,
+  TURNSTILE_TOKEN_EXPIRY: 900, // 15分钟
+  STORAGE_LIMIT: 10 * 1024 * 1024 * 1024, // 10GB
+  READ_LIMIT: 1000000, // 每天100万次读取
+  STORAGE_WARNING_THRESHOLD: 0.95, // 95%
+  READ_WARNING_THRESHOLD: 0.95, // 95%
+  STORAGE_NOTIFY_THRESHOLD: 0.70, // 70%
+  READ_NOTIFY_THRESHOLD: 0.70, // 70%
+} as const;
+
 export interface Env {
   IMAGES: R2Bucket;
   IMG_EXPIRY: KVNamespace;
@@ -9,18 +28,29 @@ export interface Env {
 // 格式化时间为东八区 yyyy-mm-dd hh:mm:ss
 function formatTimestamp(): string {
   const now = new Date();
-  // 转换为东八区时间（UTC+8）
-  const offset = 8 * 60 * 60 * 1000; // 8小时的毫秒数
-  const utc8Time = new Date(now.getTime() + offset);
+  // 使用Intl API正确处理时区
+  const formatter = new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+    timeZone: 'Asia/Shanghai'
+  });
   
-  const year = utc8Time.getFullYear();
-  const month = String(utc8Time.getMonth() + 1).padStart(2, '0');
-  const day = String(utc8Time.getDate()).padStart(2, '0');
-  const hours = String(utc8Time.getHours()).padStart(2, '0');
-  const minutes = String(utc8Time.getMinutes()).padStart(2, '0');
-  const seconds = String(utc8Time.getSeconds()).padStart(2, '0');
-  
-  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+  return formatter.format(now).replace(/\//g, '-');
+}
+
+// 生成安全的短文件名（8位）
+async function generateSecureFileName(): Promise<string> {
+  const randomBytes = new Uint8Array(4);
+  crypto.getRandomValues(randomBytes);
+  const hex = Array.from(randomBytes)
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+  return hex.substring(0, 8); // 取8个字符
 }
 
 export default {
@@ -120,9 +150,22 @@ async function handleUpload(request: Request, env: Env): Promise<Response> {
     }
 
     // 验证文件大小（最大10MB）
-    const maxSize = 10 * 1024 * 1024;
+    const maxSize = CONSTANTS.MAX_FILE_SIZE;
     if (file.size > maxSize) {
-      return errorResponse(400, 'FILE_TOO_LARGE', 'File size exceeds 10MB limit');
+      return errorResponse(400, 'FILE_TOO_LARGE', `File size exceeds ${maxSize / 1024 / 1024}MB limit`);
+    }
+
+    // 验证图片尺寸（在压缩前检查）
+    try {
+      const imageBitmap = await createImageBitmap(new Blob([arrayBuffer], { type: file.type }));
+      if (imageBitmap.width > CONSTANTS.MAX_IMAGE_WIDTH || imageBitmap.height > CONSTANTS.MAX_IMAGE_HEIGHT) {
+        imageBitmap.close();
+        return errorResponse(400, 'IMAGE_TOO_LARGE', `Image dimensions exceed ${CONSTANTS.MAX_IMAGE_WIDTH}x${CONSTANTS.MAX_IMAGE_HEIGHT} limit`);
+      }
+      imageBitmap.close();
+    } catch (e) {
+      // 如果无法创建ImageBitmap，可能在压缩时失败，继续处理
+      console.warn('Unable to validate image dimensions:', e);
     }
 
     // 计算文件哈希，检查是否重复上传
@@ -168,15 +211,16 @@ async function handleUpload(request: Request, env: Env): Promise<Response> {
     const clientIP = request.headers.get('CF-Connecting-IP') || 'unknown';
     const userAgent = request.headers.get('User-Agent') || 'unknown';
     
-    // 检查今日上传次数限制（每IP最多500次）
+    // 检查今日上传次数限制
     const todayKey = `uploads:${new Date().toISOString().split('T')[0]}`;
     const ipKey = `${todayKey}:${clientIP}`;
     
     const currentUploads = await env.IMG_EXPIRY.get(ipKey);
     const uploadCount = currentUploads ? parseInt(currentUploads) : 0;
     
-    // 每 50 次上传需要人机验证（从第 301 次开始）
-    const needsCaptcha = uploadCount >= 300 && (uploadCount % 50) === 0;
+    // 每N次上传需要人机验证
+    const needsCaptcha = uploadCount >= CONSTANTS.CAPTCHA_UPLOAD_THRESHOLD && 
+                          (uploadCount % CONSTANTS.CAPTCHA_UPLOAD_INTERVAL) === 0;
     
     // 如果需要验证但没有提供 token，拒绝
     if (needsCaptcha && !turnstileToken) {
@@ -218,15 +262,15 @@ async function handleUpload(request: Request, env: Env): Promise<Response> {
         return errorResponse(403, 'CAPTCHA_FAILED', `Captcha verification failed: ${verifyResult['error-codes']?.join(', ') || 'Unknown error'}`);
       }
 
-      // 标记 token 已使用（有效期 5 分钟）
+      // 标记 token 已使用（有效期由CONSTANTS定义）
       await env.IMG_EXPIRY.put(tokenUsedKey, '1', {
-        expirationTtl: 300
+        expirationTtl: CONSTANTS.TURNSTILE_TOKEN_EXPIRY
       });
     }
     
     // 检查是否超过每日上限
-    if (uploadCount >= 500) {
-      return errorResponse(429, 'RATE_LIMIT_EXCEEDED', 'Daily upload limit exceeded (500 uploads per IP)');
+    if (uploadCount >= CONSTANTS.MAX_UPLOADS_PER_DAY) {
+      return errorResponse(429, 'RATE_LIMIT_EXCEEDED', `Daily upload limit exceeded (${CONSTANTS.MAX_UPLOADS_PER_DAY} uploads per IP)`);
     }
     
     // 更新上传计数
@@ -240,10 +284,9 @@ async function handleUpload(request: Request, env: Env): Promise<Response> {
       try {
         const parsed = JSON.parse(statsData);
         const currentSize = parsed.totalSize || 0;
-        const STORAGE_LIMIT = 10 * 1024 * 1024 * 1024; // 10GB
         
-        // 如果存储空间使用超过 95%，拒绝上传
-        if (currentSize >= STORAGE_LIMIT * 0.95) {
+        // 如果存储空间使用超过阈值，拒绝上传
+        if (currentSize >= CONSTANTS.STORAGE_LIMIT * CONSTANTS.STORAGE_WARNING_THRESHOLD) {
           return errorResponse(507, 'STORAGE_FULL', 'Storage space is nearly full, please try again later');
         }
       } catch (e) {
@@ -256,59 +299,71 @@ async function handleUpload(request: Request, env: Env): Promise<Response> {
     const currentRate = await env.IMG_EXPIRY.get(rateKey);
     const rateCount = currentRate ? parseInt(currentRate) : 0;
     
-    if (rateCount >= 30) { // 每分钟最多 30 次
-      return errorResponse(429, 'RATE_LIMIT_EXCEEDED', 'Too many uploads in a short time, please slow down');
+    if (rateCount >= CONSTANTS.MAX_UPLOADS_PER_MINUTE) {
+      return errorResponse(429, 'RATE_LIMIT_EXCEEDED', `Too many uploads in a short time, please slow down (max ${CONSTANTS.MAX_UPLOADS_PER_MINUTE} per minute)`);
     }
     
     await env.IMG_EXPIRY.put(rateKey, String(rateCount + 1), {
       expirationTtl: 60
     });
 
-    // 生成短文件名（8位随机字符），统一使用 .webp 扩展名
-    const shortCode = Math.random().toString(36).substring(2, 10);
-    const fileName = `${shortCode}.webp`;
+    // 生成安全的短文件名
+    const shortCode = await generateSecureFileName();
+    
+    // 确定文件扩展名（GIF保持原格式，其他转为WebP）
+    const isGif = file.type === 'image/gif';
+    const fileName = `${shortCode}${isGif ? '.gif' : '.webp'}`;
 
-    // 图片压缩优化 - 强制转换为 WebP 格式
+    // 图片压缩优化 - GIF保持原格式，其他转换为WebP
     let compressedArrayBuffer = arrayBuffer;
-    let compressedType = 'image/webp';
+    let compressedType = isGif ? 'image/gif' : 'image/webp';
 
-    // 如果是 JPEG/PNG/WebP/GIF，进行压缩并转换为 WebP
-    if (file.type.startsWith('image/')) {
+    // 如果不是GIF，尝试压缩并转换为WebP
+    if (!isGif && file.type.startsWith('image/')) {
       try {
-        // 使用 Canvas API 压缩图片
-        const imageBitmap = await createImageBitmap(new Blob([arrayBuffer], { type: file.type }));
-        const canvas = new OffscreenCanvas(imageBitmap.width, imageBitmap.height);
-        const ctx = canvas.getContext('2d');
+        // 检查是否支持OffscreenCanvas
+        if (typeof OffscreenCanvas !== 'undefined') {
+          // 使用 Canvas API 压缩图片
+          const imageBitmap = await createImageBitmap(new Blob([arrayBuffer], { type: file.type }));
+          const canvas = new OffscreenCanvas(imageBitmap.width, imageBitmap.height);
+          const ctx = canvas.getContext('2d');
 
-        if (ctx) {
-          ctx.drawImage(imageBitmap, 0, 0);
+          if (ctx) {
+            ctx.drawImage(imageBitmap, 0, 0);
 
-          // 计算压缩质量（根据文件大小）
-          let quality = 0.85;
-          if (file.size > 2 * 1024 * 1024) {
-            quality = 0.75; // 大文件压缩更多
-          } else if (file.size > 1 * 1024 * 1024) {
-            quality = 0.80; // 中等文件
+            // 计算压缩质量（根据文件大小）
+            let quality = 0.85;
+            if (file.size > 2 * 1024 * 1024) {
+              quality = 0.75; // 大文件压缩更多
+            } else if (file.size > 1 * 1024 * 1024) {
+              quality = 0.80; // 中等文件
+            }
+
+            // 转换为 WebP 格式以获得更好的压缩
+            const compressedBlob = await canvas.convertToBlob({
+              quality: quality,
+              type: 'image/webp'
+            });
+
+            // 使用压缩后的 WebP 版本
+            compressedArrayBuffer = await compressedBlob.arrayBuffer();
+            compressedType = 'image/webp';
+            console.log(`Image converted to WebP: ${file.size} -> ${compressedBlob.size} bytes (${Math.round((1 - compressedBlob.size / file.size) * 100)}% reduction)`);
           }
 
-          // 转换为 WebP 格式以获得更好的压缩
-          const compressedBlob = await canvas.convertToBlob({
-            quality: quality,
-            type: 'image/webp' // 强制转换为 WebP
-          });
-
-          // 使用压缩后的 WebP 版本
-          compressedArrayBuffer = await compressedBlob.arrayBuffer();
-          compressedType = 'image/webp';
-          console.log(`Image converted to WebP: ${file.size} -> ${compressedBlob.size} bytes (${Math.round((1 - compressedBlob.size / file.size) * 100)}% reduction)`);
+          imageBitmap.close();
+        } else {
+          console.warn('OffscreenCanvas not supported, using original file');
+          // 降级：使用原始文件
+          compressedType = file.type;
         }
-
-        imageBitmap.close();
       } catch (e) {
         console.error('Image compression failed:', e);
-        // 压缩失败，使用原始文件（但仍然标记为 webp）
-        compressedType = 'image/webp';
+        // 压缩失败，使用原始文件
+        compressedType = file.type;
       }
+    } else if (isGif) {
+      console.log('GIF file detected, preserving original format');
     }
 
     // 上传到 R2（使用压缩后的数据）
@@ -449,9 +504,9 @@ async function handleSyncStats(env: Env): Promise<Response> {
 
 async function handleStats(env: Env): Promise<Response> {
   try {
-    // Cloudflare R2 免费额度
-    const STORAGE_LIMIT = 10 * 1024 * 1024 * 1024; // 10GB
-    const READ_LIMIT = 1000000; // 每天100万次读取
+    // 使用常量定义的限制
+    const STORAGE_LIMIT = CONSTANTS.STORAGE_LIMIT;
+    const READ_LIMIT = CONSTANTS.READ_LIMIT;
 
     // 从 KV 获取缓存的统计信息
     const cachedStats = await env.IMG_EXPIRY.get('stats:cache');
@@ -604,15 +659,15 @@ function getWarnings(totalSize: number, storageLimit: number, readCount: number,
   const storagePercent = (totalSize / storageLimit) * 100;
   const readPercent = (readCount / readLimit) * 100;
 
-  if (storagePercent >= 90) {
+  if (storagePercent >= CONSTANTS.STORAGE_WARNING_THRESHOLD * 100) {
     warnings.push('存储空间使用超过90%，请注意清理图片！');
-  } else if (storagePercent >= 70) {
+  } else if (storagePercent >= CONSTANTS.STORAGE_NOTIFY_THRESHOLD * 100) {
     warnings.push('存储空间使用超过70%，建议开始清理旧图片。');
   }
 
-  if (readPercent >= 90) {
+  if (readPercent >= CONSTANTS.READ_WARNING_THRESHOLD * 100) {
     warnings.push('今日读取次数接近上限！');
-  } else if (readPercent >= 70) {
+  } else if (readPercent >= CONSTANTS.READ_NOTIFY_THRESHOLD * 100) {
     warnings.push('今日读取次数较多，请注意使用。');
   }
 
@@ -754,38 +809,86 @@ async function handleApiDocs(env: Env): Promise<Response> {
         ],
         response: {
           success: {
+            success: true,
             code: 200,
-            message: '上传成功',
             data: {
-              url: `${customDomain}/abc12345.jpg`,
-              fileName: 'abc12345.jpg',
+              url: `${customDomain}/abc12345.webp`,
+              fileName: 'abc12345.webp',
               size: 123456,
-              type: 'image/jpeg',
-              timestamp: 1234567890000,
+              type: 'image/webp',
+              timestamp: '2026-02-28 16:30:00',
               expiration: null,
               expirationDays: null,
+              remainingUploads: 500,
+              captchaRequired: false,
             },
           },
           errors: [
             {
+              success: false,
               code: 400,
               error: 'MISSING_FILE',
               message: '未提供文件',
             },
             {
+              success: false,
               code: 400,
               error: 'INVALID_FILE_TYPE',
               message: '只允许上传图片文件',
             },
             {
+              success: false,
               code: 400,
               error: 'FILE_TOO_LARGE',
               message: '文件大小超过10MB限制',
             },
             {
+              success: false,
+              code: 400,
+              error: 'IMAGE_TOO_LARGE',
+              message: '图片尺寸超过10000x10000限制',
+            },
+            {
+              success: false,
+              code: 403,
+              error: 'CAPTCHA_REQUIRED',
+              message: '高频率上传需要人机验证',
+            },
+            {
+              success: false,
+              code: 403,
+              error: 'CAPTCHA_FAILED',
+              message: '验证码验证失败',
+            },
+            {
+              success: false,
+              code: 403,
+              error: 'CAPTCHA_USED',
+              message: '验证码已被使用',
+            },
+            {
+              success: false,
+              code: 429,
+              error: 'RATE_LIMIT_EXCEEDED',
+              message: '上传频率过高，请稍后再试（每分钟最多30次）',
+            },
+            {
+              success: false,
+              code: 507,
+              error: 'STORAGE_FULL',
+              message: '存储空间已满，请稍后再试',
+            },
+            {
+              success: false,
               code: 500,
               error: 'UPLOAD_FAILED',
               message: '上传失败',
+            },
+            {
+              success: false,
+              code: 500,
+              error: 'CONFIG_ERROR',
+              message: '配置错误',
             },
           ],
         },
@@ -796,7 +899,7 @@ async function handleApiDocs(env: Env): Promise<Response> {
         description: '获取存储统计信息',
         response: {
           success: {
-            code: 200,
+            success: true,
             data: {
               images: 100,
               totalSize: 1234567890,
@@ -811,6 +914,7 @@ async function handleApiDocs(env: Env): Promise<Response> {
               },
               warnings: [],
             },
+            cached: false,
           },
         },
       },
@@ -828,7 +932,7 @@ curl -X POST ${customDomain}/upload \\
       javascript: `// 上传图片
 const formData = new FormData();
 formData.append('file', fileInput.files[0]);
-formData.append('expiration', '30'); // 可选
+// formData.append('expiration', '30'); // 可选：有效期天数（0=永久）
 
 fetch('${customDomain}/upload', {
   method: 'POST',
@@ -838,24 +942,36 @@ fetch('${customDomain}/upload', {
   .then(data => {
     if (data.success) {
       console.log('图片URL:', data.data.url);
+    } else {
+      console.error('上传失败:', data.message);
     }
+  })
+  .catch(error => {
+    console.error('请求错误:', error);
   });`,
 
       python: `import requests
 
 # 上传图片
 files = {'file': open('image.jpg', 'rb')}
-data = {'expiration': '30'}  # 可选
+data = {'expiration': '30'}  # 可选：有效期天数（0=永久）
 
-response = requests.post(
-  '${customDomain}/upload',
-  files=files,
-  data=data
-)
-
-result = response.json()
-if result['success']:
-  print('图片URL:', result['data']['url'])`,
+try:
+  response = requests.post(
+    '${customDomain}/upload',
+    files=files,
+    data=data
+  )
+  
+  result = response.json()
+  if result['success']:
+    print('图片URL:', result['data']['url'])
+  else:
+    print('上传失败:', result['message'])
+except Exception as e:
+  print('请求错误:', str(e))
+finally:
+  files['file'].close()  # 关闭文件`,
 
       php: `<?php
 // 上传图片
@@ -863,7 +979,7 @@ $ch = curl_init('${customDomain}/upload');
 $cfile = new CURLFile('image.jpg');
 $data = [
   'file' => $cfile,
-  'expiration' => '30'  // 可选
+  'expiration' => '30'  // 可选：有效期天数（0=永久）
 ];
 
 curl_setopt($ch, CURLOPT_POST, 1);
@@ -871,11 +987,18 @@ curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 
 $response = curl_exec($ch);
+$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 curl_close($ch);
 
-$result = json_decode($response, true);
-if ($result['success']) {
-  echo '图片URL: ' . $result['data']['url'] . PHP_EOL;
+if ($httpCode === 200) {
+  $result = json_decode($response, true);
+  if ($result['success']) {
+    echo '图片URL: ' . $result['data']['url'] . PHP_EOL;
+  } else {
+    echo '上传失败: ' . $result['message'] . PHP_EOL;
+  }
+} else {
+  echo 'HTTP错误: ' . $httpCode . PHP_EOL;
 }
 ?>`,
     },
@@ -897,19 +1020,19 @@ async function handleShortLink(url: URL, env: Env): Promise<Response> {
     const todayKey = `stats:${new Date().toISOString().split('T')[0]}`;
     const currentReads = await env.IMG_EXPIRY.get(todayKey);
     const readCount = currentReads ? parseInt(currentReads) : 0;
-    const READ_LIMIT = 1000000; // 每天100万次读取
+    const READ_LIMIT = CONSTANTS.READ_LIMIT;
     
-    // 如果读取次数超过 95%，返回警告
-    if (readCount >= READ_LIMIT * 0.95) {
+    // 如果读取次数超过阈值，返回警告
+    if (readCount >= READ_LIMIT * CONSTANTS.READ_WARNING_THRESHOLD) {
       console.warn(`Read limit nearly reached: ${readCount}/${READ_LIMIT}`);
     }
     
-    // 检查单个 IP 的访问频率限制（每分钟最多 100 次）
+    // 检查单个 IP 的访问频率限制
     const ipRateKey = `rate:${clientIP}:${Math.floor(Date.now() / 60000)}`;
     const ipRateCount = await env.IMG_EXPIRY.get(ipRateKey);
     const currentIpRate = ipRateCount ? parseInt(ipRateCount) : 0;
     
-    if (currentIpRate >= 100) {
+    if (currentIpRate >= CONSTANTS.MAX_READS_PER_MINUTE) {
       return new Response('Rate limit exceeded', { status: 429 });
     }
     

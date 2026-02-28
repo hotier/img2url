@@ -19,5 +19,19 @@ id = "55ba208e3c4a47d28cf08bdbc5849d79"
 [vars]
 CORS_ORIGIN = "*"
 CUSTOM_DOMAIN = "https://api.hotier.cc.cd"
-TURNSTILE_SITE_KEY = "0x4AAAAAACasWM4vLebpu_B7"
-TURNSTILE_SECRET_KEY = "0x4AAAAAACasWBOpTvR1J0Q-w9omxQIevB4"
+
+# ⚠️ 重要：敏感密钥应该通过 wrangler secret 命令设置，而不是直接写在配置文件中
+# 
+# 设置 Turnstile 密钥的命令：
+# wrangler secret put TURNSTILE_SITE_KEY
+# wrangler secret put TURNSTILE_SECRET_KEY
+#
+# 或者在部署时提供：
+# wrangler deploy --env production
+#
+# 环境变量优先级：secret > vars
+#
+# 开发环境（可选）：可以在 .dev.vars 文件中设置（不要提交到git）
+# .dev.vars 文件内容：
+# TURNSTILE_SITE_KEY=your_site_key
+# TURNSTILE_SECRET_KEY=your_secret_key

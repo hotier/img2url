@@ -99,10 +99,12 @@ function ApiDocs() {
   return (
     <div className="docs-page">
       <div className="docs-header">
-        <Link to="/" className="back-btn">
-          <i className="bi bi-arrow-left"></i>
-          返回首页
-        </Link>
+        <div className="back-btn-wrapper">
+          <Link to="/" className="back-btn">
+            <i className="bi bi-house-door"></i>
+            返回首页
+          </Link>
+        </div>
         <div className="docs-brand">
           <h1>
             <i className="bi bi-code-slash"></i>

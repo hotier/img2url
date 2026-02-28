@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import Turnstile from './Turnstile';
 import { API_URL, API_DOMAIN } from './config';
 
 function App() {
@@ -16,7 +17,17 @@ function App() {
   const [pendingFile, setPendingFile] = useState(null);
   const [uploadQueue, setUploadQueue] = useState([]);
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0, currentProgress: 0, currentFileName: '', currentFileSize: 0 });
+  const [uploadSuccess, setUploadSuccess] = useState(false);
   const uploadZoneRef = useRef(null);
+  const progressBarRef = useRef(null);
+  const uploadStatsRef = useRef({
+    totalSize: 0,      // 所有文件的总大小
+    uploadedSize: 0,   // 已上传的总字节数
+    completedFiles: 0  // 已完成的文件数
+  }); // 追踪整个上传行为的进度
+  const originalQueueRef = useRef([]); // 存储原始队列快照
+  const uploadSessionIdRef = useRef(0); // 上传会话ID，用于检测新的上传会话
+  const currentBatchTotalRef = useRef(0); // 当前批次的总文件数（固定不变）
 
   useEffect(() => {
     const savedImages = localStorage.getItem('uploadedImages');
@@ -67,89 +78,122 @@ function App() {
 
     setUploading(true);
     const file = uploadQueue[0];
-    setUploadProgress({ current: 1, total: uploadQueue.length });
+    const totalFiles = uploadQueue.length;
+
+    // 检测新的上传批次：当前批次完成或原始队列长度不同
+    const isNewBatch = uploadStatsRef.current.completedFiles >= currentBatchTotalRef.current ||
+                       (currentBatchTotalRef.current > 0 && currentBatchTotalRef.current !== originalQueueRef.current.length);
+
+    if (isNewBatch) {
+      // 新的上传批次：生成新的会话ID
+      uploadSessionIdRef.current = Date.now();
+      // 保存当前批次的总文件数（固定不变）
+      currentBatchTotalRef.current = totalFiles;
+      // 计算所有文件的总大小
+      const totalSize = uploadQueue.reduce((sum, f) => sum + f.size, 0);
+      // 保存原始队列快照
+      originalQueueRef.current = [...uploadQueue];
+      // 重置统计
+      uploadStatsRef.current = {
+        totalSize: totalSize,
+        uploadedSize: 0,
+        completedFiles: 0
+      };
+
+      // 设置初始进度为1%，确保进度条可见
+      setUploadProgress({
+        current: 1,
+        total: totalFiles,
+        currentProgress: 1,
+        currentFileName: file.name,
+        currentFileSize: file.size
+      });
+    }
 
     await handleUpload(file);
 
-    setUploadQueue(prev => prev.slice(1));
-    setUploadProgress({ current: uploadQueue.length - 1, total: uploadQueue.length - 1 });
+    // 更新队列
+    setUploadQueue(prev => {
+      const newQueue = prev.slice(1);
 
+      // 如果队列还有文件，更新当前显示的文件信息
+      if (newQueue.length > 0) {
+        setUploadProgress(prev => ({
+          ...prev,
+          current: uploadStatsRef.current.completedFiles + 1,
+          currentFileName: newQueue[0].name,
+          currentFileSize: newQueue[0].size
+        }));
+      } else {
+        // 所有文件上传完成，进度设为100%
+        setUploadProgress(prev => ({
+          ...prev,
+          currentProgress: 100
+        }));
+        // 重置统计
+        uploadStatsRef.current = {
+          totalSize: 0,
+          uploadedSize: 0,
+          completedFiles: 0
+        };
+        // 重置原始队列快照
+        originalQueueRef.current = [];
+        // 重置当前批次总文件数
+        currentBatchTotalRef.current = 0;
+      }
+
+      return newQueue;
+    });
+
+    // 检查是否所有文件都上传完成
     if (uploadQueue.length === 1) {
-      setUploading(false);
-      setUploadProgress({ current: 0, total: 0, currentProgress: 0, currentFileName: '', currentFileSize: 0 });
+      // 显示上传成功动画
+      setUploadSuccess(true);
+      setTimeout(() => {
+        setUploading(false);
+        setUploadSuccess(false);
+        setUploadProgress({ current: 0, total: 0, currentProgress: 0, currentFileName: '', currentFileSize: 0 });
+        uploadStatsRef.current = {
+          totalSize: 0,
+          uploadedSize: 0,
+          completedFiles: 0
+        };
+        // 重置原始队列快照
+        originalQueueRef.current = [];
+        // 重置当前批次总文件数
+        currentBatchTotalRef.current = 0;
+      }, 2000); // 2秒后重置
     }
   };
 
-  // 手动渲染 Turnstile
-  useEffect(() => {
-    if (captchaRequired && window.turnstile) {
-      const container = document.getElementById('turnstile-container');
-      if (container) {
-        console.log('Manually rendering Turnstile');
-        try {
-          // 清空容器内容，确保干净的状态
-          container.innerHTML = '';
-
-          const widgetId = window.turnstile.render('#turnstile-container', {
-            sitekey: '0x4AAAAAACasWM4vLebpu_B7',
-            theme: 'light',
-            callback: (token) => {
-              console.log('Captcha success:', token);
-              setTurnstileToken(token);
-              setTimeout(() => {
-                setCaptchaRequired(false);
-                setError('');
-                // 如果有待上传的文件，自动上传
-                if (pendingFile) {
-                  handleUploadWithToken(pendingFile, token);
-                  setPendingFile(null); // 清除缓存的文件
-                }
-              }, 500);
-            },
-            'error-callback': () => {
-              console.log('Captcha error');
-              setError('验证失败，请重试');
-              setTurnstileToken('');
-            },
-            'expired-callback': () => {
-              console.log('Captcha expired');
-              setError('验证已过期，请重新验证');
-              setTurnstileToken('');
-            },
-          });
-
-          // 保存 widgetId 以便后续清理
-          container.dataset.widgetId = widgetId;
-        } catch (e) {
-          console.error('Failed to render Turnstile:', e);
-        }
+  // Turnstile验证成功回调
+  const handleCaptchaSuccess = (token) => {
+    console.log('Captcha success:', token);
+    setTurnstileToken(token);
+    setTimeout(() => {
+      setCaptchaRequired(false);
+      setError('');
+      // 如果有待上传的文件，自动上传
+      if (pendingFile) {
+        handleUploadWithToken(pendingFile, token);
+        setPendingFile(null); // 清除缓存的文件
       }
-    }
-  }, [captchaRequired]); // 只依赖 captchaRequired
+    }, 500);
+  };
 
-  // 加载 Turnstile 脚本
-  useEffect(() => {
-    if (document.querySelector('script[src="https://challenges.cloudflare.com/turnstile/v0/api.js"]')) {
-      console.log('Turnstile script already loaded');
-      return; // 已经加载过了
-    }
+  // Turnstile验证失败回调
+  const handleCaptchaError = (error) => {
+    console.log('Captcha error:', error);
+    setError('验证失败，请重试');
+    setTurnstileToken('');
+  };
 
-    console.log('Loading Turnstile script...');
-    const script = document.createElement('script');
-    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
-    script.async = true;
-    script.defer = true;
-    script.onload = () => {
-      console.log('Turnstile script loaded successfully');
-      if (window.turnstile) {
-        console.log('Turnstile API available:', window.turnstile);
-      }
-    };
-    script.onerror = () => {
-      console.error('Failed to load Turnstile script');
-    };
-    document.body.appendChild(script);
-  }, []);
+  // Turnstile验证过期回调
+  const handleCaptchaExpire = () => {
+    console.log('Captcha expired');
+    setError('验证已过期，请重新验证');
+    setTurnstileToken('');
+  };
 
   const fetchStats = async () => {
     try {
@@ -237,23 +281,34 @@ function App() {
         formData.append('turnstile', turnstileToken);
       }
 
-      // 上传进度
+      // 上传进度 - 基于整体上传行为计算进度
       xhr.upload.addEventListener('progress', (e) => {
         if (e.lengthComputable) {
-          const progress = Math.round((e.loaded / e.total) * 100);
+          const fileUploadedSize = e.loaded; // 当前文件已上传的字节数
+          const fileTotalSize = e.total;     // 当前文件的总字节数
+
+          // 计算已完成文件的总大小（使用原始队列快照）
+          const completedFilesTotalSize = originalQueueRef.current.reduce((sum, f, i) => {
+            if (i < uploadStatsRef.current.completedFiles) {
+              return sum + f.size;
+            }
+            return sum;
+          }, 0);
+
+          // 更新整体已上传字节数：已完成文件的总大小 + 当前文件已上传的字节数
+          uploadStatsRef.current.uploadedSize = completedFilesTotalSize + fileUploadedSize;
+
+          // 计算整体上传行为进度：已上传总字节数 / 所有文件总字节数
+          const overallProgress = Math.round(
+            (uploadStatsRef.current.uploadedSize / uploadStatsRef.current.totalSize) * 100
+          );
+
           setUploadProgress(prev => ({
             ...prev,
-            currentProgress: progress,
+            currentProgress: overallProgress,
             currentFileName: file.name,
             currentFileSize: file.size
           }));
-          // 动态更新波浪高度
-          if (uploadZoneRef.current) {
-            const waveElement = uploadZoneRef.current.querySelector('::before');
-            if (waveElement) {
-              waveElement.style.height = `${progress}%`;
-            }
-          }
         }
       });
 
@@ -286,6 +341,17 @@ function App() {
                 // 清除验证 token（防止重复使用）
                 setTurnstileToken('');
               }
+
+              // 更新已完成文件数和已上传字节数
+              uploadStatsRef.current.completedFiles = uploadStatsRef.current.completedFiles + 1;
+              // 计算已完成文件的总大小（用于下一个文件的进度计算）
+              const completedFilesTotalSize = originalQueueRef.current.reduce((sum, f, i) => {
+                if (i < uploadStatsRef.current.completedFiles) {
+                  return sum + f.size;
+                }
+                return sum;
+              }, 0);
+              uploadStatsRef.current.uploadedSize = completedFilesTotalSize;
 
               fetchStats();
               resolve(result);
@@ -486,24 +552,13 @@ function App() {
 
         {/* 上传区域 */}
         <div
-          className={`upload-zone ${dragActive ? 'active' : ''} ${uploading ? 'uploading' : ''}`}
+          className={`upload-zone ${dragActive ? 'active' : ''} ${uploading ? 'uploading' : ''} ${uploadSuccess ? 'uploaded' : ''}`}
           onDragEnter={handleDrag}
           onDragLeave={handleDrag}
           onDragOver={handleDrag}
           onDrop={handleDrop}
           ref={uploadZoneRef}
         >
-          {uploading && (
-            <>
-              <div
-                className="wave-background"
-                style={{ width: `${uploadProgress.currentProgress}%` }}
-              >
-                <div className="wave-lines"></div>
-                <div className="wave-surface"></div>
-              </div>
-            </>
-          )}
           <input
             type="file"
             id="file-upload"
@@ -511,35 +566,32 @@ function App() {
             accept="image/*"
             multiple
             onChange={handleChange}
-            disabled={uploading}
+            disabled={uploading || uploadSuccess}
           />
           <label htmlFor="file-upload" className="upload-label">
-            {uploading ? (
+            {uploadSuccess ? (
+              <div className="upload-success">
+                <div className="success-icon">
+                  <div className="success-check">
+                    <svg viewBox="0 0 40 40">
+                      <path d="M10 20 L17 27 L30 13" />
+                    </svg>
+                  </div>
+                </div>
+                <span className="success-text">上传成功！</span>
+              </div>
+            ) : uploading ? (
               <div className="upload-state uploading">
-                {uploadProgress.currentProgress > 0 ? (
-                  <>
-                    <div className="upload-progress-container">
-                      <div className="progress-bar">
-                        <div className="progress-fill" style={{ width: `${uploadProgress.currentProgress}%` }}></div>
-                      </div>
-                      <span className="progress-text">{uploadProgress.currentProgress}%</span>
-                    </div>
-                    {uploadProgress.currentFileName && (
-                      <span className="upload-filename">{uploadProgress.currentFileName}</span>
-                    )}
-                    {uploadProgress.total > 0 && (
-                      <span className="upload-queue-info">({uploadProgress.current}/{uploadProgress.total})</span>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <div className="spinner"></div>
-                    {uploadProgress.total > 0 ? (
-                      <span>准备上传 ({uploadProgress.current}/{uploadProgress.total})...</span>
-                    ) : (
-                      <span>上传中...</span>
-                    )}
-                  </>
+                <div className="progress-bar-container" ref={progressBarRef} key="progress-bar">
+                  <div className="progress-bubble" style={{ left: `${uploadProgress.currentProgress}%` }}>
+                    <span>{uploadProgress.currentProgress}%</span>
+                  </div>
+                  <div className="progress-bar">
+                    <div className="progress-fill" style={{ width: `${uploadProgress.currentProgress}%` }}></div>
+                  </div>
+                </div>
+                {uploadProgress.total > 0 && (
+                  <span className="upload-queue-info">({uploadProgress.current}/{uploadProgress.total})</span>
                 )}
               </div>
             ) : (
@@ -577,11 +629,13 @@ function App() {
               <div className="captcha-modal-body">
                 <p>为了防止滥用，请完成以下验证：</p>
                 <div className="captcha-wrapper">
-                  <div
-                    id="turnstile-container"
-                    className="cf-turnstile"
-                    data-sitekey="0x4AAAAAACasWM4vLebpu_B7"
-                  ></div>
+                  <Turnstile
+                    siteKey="0x4AAAAAACasWM4vLebpu_B7"
+                    onSuccess={handleCaptchaSuccess}
+                    onError={handleCaptchaError}
+                    onExpire={handleCaptchaExpire}
+                    theme="light"
+                  />
                 </div>
               </div>
               <div className="captcha-modal-footer">
@@ -597,31 +651,35 @@ function App() {
         {/* 控制栏 */}
         <div className="control-bar">
           <div className="setting-row">
-            <label className="toggle-wrapper">
-              <input
-                type="checkbox"
-                checked={showExpirationOptions}
-                onChange={handleToggleExpiration}
-                className="d-none"
-              />
-              <span className="toggle"></span>
+            <div className="setting-left">
+              <label className="toggle-wrapper">
+                <input
+                  type="checkbox"
+                  checked={showExpirationOptions}
+                  onChange={handleToggleExpiration}
+                  className="d-none"
+                />
+                <span className="toggle"></span>
+              </label>
               <span className="setting-label">图片有效期</span>
-            </label>
-            <div className="setting-tooltip">
-              <i className="bi bi-question-circle"></i>
-              <span className="tooltip">不开启默认永久保存</span>
+              <div className="setting-tooltip">
+                <i className="bi bi-question-circle"></i>
+                <span className="tooltip">不开启默认永久保存</span>
+              </div>
             </div>
-            <div className={`expiration-bar ${showExpirationOptions ? 'show' : ''}`}>
-              {[1, 7, 30, 90].map((days) => (
-                <button
-                  key={days}
-                  className={`day-btn ${expiration === days ? 'active' : ''}`}
-                  onClick={() => setExpiration(days)}
-                >
-                  {days === 1 ? '1天' : `${days}天`}
-                </button>
-              ))}
-            </div>
+            {showExpirationOptions && (
+              <div className={`expiration-bar show`}>
+                {[1, 7, 30, 90].map((days) => (
+                  <button
+                    key={days}
+                    className={`day-btn ${expiration === days ? 'active' : ''}`}
+                    onClick={() => setExpiration(days)}
+                  >
+                    {days === 1 ? '1天' : `${days}天`}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -649,6 +707,9 @@ function App() {
             <div className="history-list">
               {uploadedImages.map((img, index) => (
                 <div key={index} className={`history-item ${img.duplicate ? 'duplicate' : ''}`}>
+                  <button className="history-delete" onClick={() => deleteImage(index)} title="删除">
+                    <i className="bi bi-trash"></i>
+                  </button>
                   <img src={img.url} alt="" className="history-thumb" />
                   <div className="history-info">
                     <div className="history-name">{img.originalName}</div>
@@ -660,17 +721,16 @@ function App() {
                     </div>
                     <div className="history-url">
                       <input type="text" value={img.url} readOnly />
-                      <button onClick={() => copyToClipboard(img.url)} title="复制">
-                        <i className="bi bi-clipboard"></i>
-                      </button>
-                      <a href={img.url} target="_blank" rel="noopener noreferrer" title="打开">
-                        <i className="bi bi-box-arrow-up-right"></i>
-                      </a>
+                      <div className="history-actions-group">
+                        <button onClick={() => copyToClipboard(img.url)} title="复制">
+                          <i className="bi bi-clipboard"></i>
+                        </button>
+                        <a href={img.url} target="_blank" rel="noopener noreferrer" title="打开">
+                          <i className="bi bi-box-arrow-up-right"></i>
+                        </a>
+                      </div>
                     </div>
                   </div>
-                  <button className="history-delete" onClick={() => deleteImage(index)} title="删除">
-                    <i className="bi bi-trash"></i>
-                  </button>
                 </div>
               ))}
             </div>
