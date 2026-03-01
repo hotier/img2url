@@ -3,6 +3,64 @@ import { Link } from 'react-router-dom';
 import Turnstile from './Turnstile';
 import { API_URL, API_DOMAIN } from './config';
 
+// 数字动画组件
+function AnimatedNumber({ value, suffix = '' }) {
+  const [displayValue, setDisplayValue] = useState(0);
+
+  useEffect(() => {
+    const duration = 1000; // 动画持续时间 1 秒
+    const steps = 60; // 动画步数
+    const stepValue = value / steps;
+    let currentStep = 0;
+
+    const timer = setInterval(() => {
+      currentStep++;
+      if (currentStep >= steps) {
+        setDisplayValue(value);
+        clearInterval(timer);
+      } else {
+        setDisplayValue(Math.round(stepValue * currentStep));
+      }
+    }, duration / steps);
+
+    return () => clearInterval(timer);
+  }, [value]);
+
+  return <span>{displayValue.toLocaleString()}{suffix}</span>;
+}
+
+// 存储大小动画组件
+function AnimatedSize({ value }) {
+  const [displayValue, setDisplayValue] = useState(0);
+
+  useEffect(() => {
+    const duration = 1000; // 动画持续时间 1 秒
+    const steps = 60; // 动画步数
+    const stepValue = value / steps;
+    let currentStep = 0;
+
+    const timer = setInterval(() => {
+      currentStep++;
+      if (currentStep >= steps) {
+        setDisplayValue(value);
+        clearInterval(timer);
+      } else {
+        setDisplayValue(Math.round(stepValue * currentStep));
+      }
+    }, duration / steps);
+
+    return () => clearInterval(timer);
+  }, [value]);
+
+  return <span>{formatSize(displayValue)}</span>;
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
 function App() {
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
@@ -45,7 +103,7 @@ function App() {
       setUploadCount(parseInt(savedUploadCount));
     }
 
-    fetchStats();
+    fetchStats(false); // 不强制刷新，使用缓存
 
     const handlePaste = (e) => {
       const items = e.clipboardData?.items;
@@ -54,7 +112,8 @@ function App() {
           if (item.type.startsWith('image/')) {
             const file = item.getAsFile();
             if (file) {
-              handleUpload(file);
+              // 将粘贴的图片加入上传队列，保持与其他上传方式一致
+              setUploadQueue(prev => [...prev, file]);
               break;
             }
           }
@@ -102,7 +161,7 @@ function App() {
 
       // 设置初始进度为1%，确保进度条可见
       setUploadProgress({
-        current: 1,
+        current: 0,
         total: totalFiles,
         currentProgress: 1,
         currentFileName: file.name,
@@ -115,19 +174,23 @@ function App() {
     // 更新队列
     setUploadQueue(prev => {
       const newQueue = prev.slice(1);
+      
+      // 增加已完成文件数
+      uploadStatsRef.current.completedFiles = uploadStatsRef.current.completedFiles + 1;
 
       // 如果队列还有文件，更新当前显示的文件信息
       if (newQueue.length > 0) {
         setUploadProgress(prev => ({
           ...prev,
-          current: uploadStatsRef.current.completedFiles + 1,
+          current: uploadStatsRef.current.completedFiles,
           currentFileName: newQueue[0].name,
           currentFileSize: newQueue[0].size
         }));
       } else {
-        // 所有文件上传完成，进度设为100%
+        // 所有文件上传完成，更新 current 为总文件数
         setUploadProgress(prev => ({
           ...prev,
+          current: uploadStatsRef.current.completedFiles,
           currentProgress: 100
         }));
         // 重置统计
@@ -147,22 +210,30 @@ function App() {
 
     // 检查是否所有文件都上传完成
     if (uploadQueue.length === 1) {
-      // 显示上传成功动画
-      setUploadSuccess(true);
+      // 所有文件上传完成，先显示 100% 进度
+      setUploadProgress(prev => ({
+        ...prev,
+        currentProgress: 100
+      }));
+      
+      // 延迟 300ms 后显示上传成功动画，让用户看到 100% 进度
       setTimeout(() => {
-        setUploading(false);
-        setUploadSuccess(false);
-        setUploadProgress({ current: 0, total: 0, currentProgress: 0, currentFileName: '', currentFileSize: 0 });
-        uploadStatsRef.current = {
-          totalSize: 0,
-          uploadedSize: 0,
-          completedFiles: 0
-        };
-        // 重置原始队列快照
-        originalQueueRef.current = [];
-        // 重置当前批次总文件数
-        currentBatchTotalRef.current = 0;
-      }, 2000); // 2秒后重置
+        setUploadSuccess(true);
+        setTimeout(() => {
+          setUploading(false);
+          setUploadSuccess(false);
+          setUploadProgress({ current: 0, total: 0, currentProgress: 0, currentFileName: '', currentFileSize: 0 });
+          uploadStatsRef.current = {
+            totalSize: 0,
+            uploadedSize: 0,
+            completedFiles: 0
+          };
+          // 重置原始队列快照
+          originalQueueRef.current = [];
+          // 重置当前批次总文件数
+          currentBatchTotalRef.current = 0;
+        }, 2000); // 2秒后重置
+      }, 300); // 300ms 延迟显示成功动画
     }
   };
 
@@ -195,9 +266,10 @@ function App() {
     setTurnstileToken('');
   };
 
-  const fetchStats = async () => {
+  const fetchStats = async (force = false) => {
     try {
-      const response = await fetch(`${API_DOMAIN}/stats`);
+      const url = force ? `${API_DOMAIN}/stats?force=true` : `${API_DOMAIN}/stats`;
+      const response = await fetch(url);
       const result = await response.json();
       if (result.success) {
         setStats(result.data);
@@ -299,8 +371,10 @@ function App() {
           uploadStatsRef.current.uploadedSize = completedFilesTotalSize + fileUploadedSize;
 
           // 计算整体上传行为进度：已上传总字节数 / 所有文件总字节数
-          const overallProgress = Math.round(
-            (uploadStatsRef.current.uploadedSize / uploadStatsRef.current.totalSize) * 100
+          // 使用 Math.min 限制最大值为 100，避免显示 101%
+          const overallProgress = Math.min(
+            100,
+            Math.round((uploadStatsRef.current.uploadedSize / uploadStatsRef.current.totalSize) * 100)
           );
 
           setUploadProgress(prev => ({
@@ -418,7 +492,8 @@ function App() {
       // 上传进度
       xhr.upload.addEventListener('progress', (e) => {
         if (e.lengthComputable) {
-          const progress = Math.round((e.loaded / e.total) * 100);
+          // 使用 Math.min 限制最大值为 100，避免显示 101%
+          const progress = Math.min(100, Math.round((e.loaded / e.total) * 100));
           setUploadProgress(prev => ({
             ...prev,
             currentProgress: progress,
@@ -511,12 +586,6 @@ function App() {
     setUploadedImages(uploadedImages.filter((_, i) => i !== index));
   };
 
-  const formatSize = (bytes) => {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-  };
-
   const getExpirationText = (expirationDays) => {
     if (expirationDays === null || expirationDays === 0 || expirationDays === undefined) return '永久';
     return `${expirationDays}天`;
@@ -583,11 +652,15 @@ function App() {
             ) : uploading ? (
               <div className="upload-state uploading">
                 <div className="progress-bar-container" ref={progressBarRef} key="progress-bar">
+                  {/* 桌面端：移动的气泡 */}
                   <div className="progress-bubble" style={{ left: `${uploadProgress.currentProgress}%` }}>
                     <span>{uploadProgress.currentProgress}%</span>
                   </div>
+                  {/* 进度条 */}
                   <div className="progress-bar">
                     <div className="progress-fill" style={{ width: `${uploadProgress.currentProgress}%` }}></div>
+                    {/* 移动端：固定在中间的文字 */}
+                    <div className="progress-text-mobile">{uploadProgress.currentProgress}%</div>
                   </div>
                 </div>
                 {uploadProgress.total > 0 && (
@@ -741,18 +814,14 @@ function App() {
       {/* 底部状态栏 */}
       <div className="status-bar">
         <div className="status-badges">
-          {stats && (
-            <>
-              <span className="status-badge">
-                <i className="bi bi-images"></i>
-                {stats.images.toLocaleString()} 张
-              </span>
-              <span className="status-badge">
-                <i className="bi bi-hdd"></i>
-                {stats.totalSizeFormatted}
-              </span>
-            </>
-          )}
+          <span className="status-badge">
+            <i className="bi bi-images"></i>
+            <AnimatedNumber value={stats?.images || 0} suffix=" 张" />
+          </span>
+          <span className="status-badge">
+            <i className="bi bi-hdd"></i>
+            <AnimatedSize value={stats?.totalSize || 0} />
+          </span>
           <span className="status-badge">
             <i className="bi bi-shield-check"></i>
             Cloudflare R2

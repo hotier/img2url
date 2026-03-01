@@ -17,6 +17,8 @@ id = "55ba208e3c4a47d28cf08bdbc5849d79"
 
 # 环境变量
 [vars]
+CLOUDFLARE_ACCOUNT_ID = "adfb53e387c2b0452c567e03bfd35d9d"
+CLOUDFLARE_API_TOKEN = "bL0JmLCbhRxENvmatHue3RakhOomcE-LVXts6_24"
 CORS_ORIGIN = "*"
 CUSTOM_DOMAIN = "https://api.hotier.cc.cd"
 

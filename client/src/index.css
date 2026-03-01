@@ -676,11 +676,9 @@ body {
   height: 30px;
   position: relative;
   margin-bottom: 16px;
-  opacity: 1;
-  transform: scale(1);
 }
 
-/* 进度气泡 */
+/* 桌面端：进度气泡 */
 .progress-bubble {
   position: absolute;
   top: -45px;
@@ -723,6 +721,7 @@ body {
   background: #e2e8f0;
   border-radius: 8px;
   overflow: hidden;
+  position: relative;
 }
 
 .progress-fill {
@@ -730,6 +729,20 @@ body {
   background: linear-gradient(90deg, #93c5fd 0%, #3b82f6 100%);
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border-radius: 8px;
+}
+
+/* 移动端：固定在中间的文字 */
+.progress-text-mobile {
+  display: none;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+  z-index: 2;
+  white-space: nowrap;
 }
 
 /* 上传成功动画 */
@@ -1795,26 +1808,6 @@ input:checked + .toggle::after {
       stroke-dashoffset: 0;
     }
   }
-
-  /* 移动端：进度百分比居中显示在进度条上方 */
-  .progress-bubble {
-    display: block;
-    top: -32px;
-    left: 50%;
-    font-size: 12px;
-    padding: 4px 10px;
-  }
-
-  .progress-bar-container {
-    position: relative;
-    padding-top: 36px; /* 为进度气泡留出空间 */
-    margin-bottom: 8px;
-  }
-
-  .status-badge {
-    font-size: 10px;
-    padding: 5px 10px;
-  }
 }
 
 @media (max-width: 480px) {
@@ -1909,6 +1902,22 @@ input:checked + .toggle::after {
   .status-badge {
     font-size: 9px;
     padding: 4px 8px;
+  }
+
+  /* 移动端进度条样式 */
+  .progress-bar-container {
+    max-width: 100%;
+    height: 24px;
+    margin-bottom: 12px;
+  }
+
+  .progress-bubble {
+    display: none;
+  }
+
+  .progress-text-mobile {
+    display: block;
+    font-size: 11px;
   }
 }
 

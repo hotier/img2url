@@ -13,6 +13,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <Routes>
           <Route path="/" element={<App />} />
           <Route path="/api" element={<ApiDocs />} />
+          <Route path="*" element={null} />
         </Routes>
       </BrowserRouter>
     </ErrorBoundary>
