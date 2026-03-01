@@ -21,6 +21,8 @@ CLOUDFLARE_ACCOUNT_ID = "adfb53e387c2b0452c567e03bfd35d9d"
 CLOUDFLARE_API_TOKEN = "bL0JmLCbhRxENvmatHue3RakhOomcE-LVXts6_24"
 CORS_ORIGIN = "*"
 CUSTOM_DOMAIN = "https://api.hotier.cc.cd"
+R2_S3_ENDPOINT = "https://adfb53e387c2b0452c567e03bfd35d9d.r2.cloudflarestorage.com"
+R2_BUCKET_NAME = "img2url-images"
 
 # ⚠️ 重要：敏感密钥应该通过 wrangler secret 命令设置，而不是直接写在配置文件中
 # 

@@ -1296,6 +1296,51 @@ input:checked + .toggle::after {
   font-size: 14px;
 }
 
+/* 存储用量状态 */
+.status-badge.status-normal {
+  color: #059669;
+}
+
+.status-badge.status-normal i {
+  color: #059669;
+}
+
+.status-badge.status-warning {
+  color: #f59e0b;
+  animation: pulse-warning 2s ease-in-out infinite;
+}
+
+.status-badge.status-warning i {
+  color: #f59e0b;
+}
+
+.status-badge.status-critical {
+  color: #ef4444;
+  animation: pulse-critical 1s ease-in-out infinite;
+}
+
+.status-badge.status-critical i {
+  color: #ef4444;
+}
+
+@keyframes pulse-warning {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+@keyframes pulse-critical {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
 /* 移动端响应式适配 */
 @media (max-width: 640px) {
   .app-container {

@@ -1,4 +1,6 @@
 // 常量定义
+import { S3Client, ListObjectsV2Command } from '@aws-sdk/client-s3';
+
 const CONSTANTS = {
   MAX_FILE_SIZE: 10 * 1024 * 1024, // 10MB
   MAX_IMAGE_WIDTH: 10000,
@@ -23,6 +25,10 @@ export interface Env {
   CORS_ORIGIN?: string;
   CUSTOM_DOMAIN?: string;
   TURNSTILE_SECRET_KEY?: string;
+  R2_S3_ACCESS_KEY_ID?: string;
+  R2_S3_SECRET_ACCESS_KEY?: string;
+  R2_S3_ENDPOINT?: string;
+  R2_BUCKET_NAME?: string;
 }
 
 // 格式化时间为东八区 yyyy-mm-dd hh:mm:ss
@@ -278,20 +284,28 @@ async function handleUpload(request: Request, env: Env): Promise<Response> {
       expirationTtl: 24 * 60 * 60
     });
 
-    // 检查存储空间使用情况
-    const statsData = await env.IMG_EXPIRY.get('global:stats');
-    if (statsData) {
-      try {
-        const parsed = JSON.parse(statsData);
-        const currentSize = parsed.totalSize || 0;
-        
-        // 如果存储空间使用超过阈值，拒绝上传
-        if (currentSize >= CONSTANTS.STORAGE_LIMIT * CONSTANTS.STORAGE_WARNING_THRESHOLD) {
-          return errorResponse(507, 'STORAGE_FULL', 'Storage space is nearly full, please try again later');
+    // 检查存储空间使用情况（获取最新统计）
+    let currentStoragePercent = 0;
+    try {
+      const statsResponse = await handleStats(env);
+      const statsText = await statsResponse.text();
+      const statsData = JSON.parse(statsText);
+
+      if (statsData.success && statsData.data) {
+        currentStoragePercent = statsData.data.storageUsage || 0;
+
+        // 90% 强制停止上传
+        if (currentStoragePercent >= 90) {
+          return errorResponse(507, 'STORAGE_FULL', `存储空间已使用 ${currentStoragePercent.toFixed(1)}%，已达到 90% 上限，暂停上传服务。请联系管理员清理旧图片。`);
         }
-      } catch (e) {
-        console.error('Error checking storage:', e);
+
+        // 70% 警告（但不阻止上传）
+        if (currentStoragePercent >= 70) {
+          console.warn(`Storage usage warning: ${currentStoragePercent.toFixed(1)}%`);
+        }
       }
+    } catch (e) {
+      console.error('Error checking storage usage:', e);
     }
 
     // 检查异常行为（短时间内大量上传）
@@ -399,9 +413,6 @@ async function handleUpload(request: Request, env: Env): Promise<Response> {
       expirationTtl: 30 * 24 * 60 * 60
     });
 
-    // 更新统计
-    await updateStats(env, file.size, 1);
-
     // 清除统计缓存，确保下次获取最新统计
     await env.IMG_EXPIRY.delete('stats:cache');
 
@@ -415,10 +426,13 @@ async function handleUpload(request: Request, env: Env): Promise<Response> {
           fileName,
           size: file.size,
           type: file.type,
-          timestamp: formatTimestamp(),          expiration: expiration > 0 ? new Date(Date.now() + expiration * 24 * 60 * 60 * 1000).getTime() : null,
+          timestamp: formatTimestamp(),
+          expiration: expiration > 0 ? new Date(Date.now() + expiration * 24 * 60 * 60 * 1000).getTime() : null,
           expirationDays: expiration > 0 ? expiration : null,
           remainingUploads: 500 - (uploadCount + 1),
           captchaRequired: (uploadCount + 1) >= 300 && ((uploadCount + 1) % 50) === 0,
+          storageUsage: currentStoragePercent,
+          storageWarning: currentStoragePercent >= 70,
         },
       }),
       'application/json'
@@ -433,44 +447,66 @@ async function handleUpload(request: Request, env: Env): Promise<Response> {
 
 async function handleSyncStats(env: Env): Promise<Response> {
   try {
-    // 从 R2 遍历获取实际统计
     let totalSize = 0;
     let count = 0;
-    let cursor = undefined;
-    const maxIterations = 10000;
-    let iterations = 0;
-    
-    // 第一次调用
-    const firstList = await env.IMAGES.list({ limit: 1000 });
-    
-    if (firstList.keys && firstList.keys.length > 0) {
-      for (const key of firstList.keys) {
-        totalSize += key.size || 0;
-        count++;
-      }
-    }
-    
-    // 继续分页
-    if (firstList.truncated && firstList.cursor) {
-      cursor = firstList.cursor;
-      
+
+    // 使用 Cloudflare R2 API 获取存储桶统计信息
+    try {
+      const accountId = 'adfb53e387c2b0452c567e03bfd35d9d';
+      const apiToken = 'jsO13YbRTDfHrPECZqH_ukaUBTWRy3fS8k1HEhAS';
+      const bucketName = 'img2url-images';
+
+      let cursor: string | undefined = undefined;
+      const maxIterations = 100;
+      let iterations = 0;
+
+      // 分页获取所有对象
       while (iterations < maxIterations) {
         iterations++;
-        const list = await env.IMAGES.list({ limit: 1000, cursor: cursor });
-        
-        if (list.keys && list.keys.length > 0) {
-          for (const key of list.keys) {
-            totalSize += key.size || 0;
-            count++;
+
+        const url = cursor
+          ? `https://api.cloudflare.com/client/v4/accounts/${accountId}/r2/buckets/${bucketName}/objects?cursor=${encodeURIComponent(cursor)}`
+          : `https://api.cloudflare.com/client/v4/accounts/${accountId}/r2/buckets/${bucketName}/objects`;
+
+        const response = await fetch(url, {
+          headers: {
+            'Authorization': `Bearer ${apiToken}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+
+          if (data.success && data.result && Array.isArray(data.result)) {
+            // 统计当前页的对象
+            for (const obj of data.result) {
+              count++;
+              totalSize += obj.size || 0;
+            }
+
+            console.log(`Sync API iteration ${iterations}: ${data.result.length} objects, total: ${count}, size: ${totalSize} bytes`);
+
+            // 检查是否还有更多数据
+            if (data.result_info && data.result_info.is_truncated && data.result_info.cursor) {
+              cursor = data.result_info.cursor;
+            } else {
+              // 没有更多数据了
+              break;
+            }
+          } else {
+            console.error('Invalid API response format');
+            break;
           }
-        }
-        
-        if (!list.truncated || (list.keys && list.keys.length === 0)) {
+        } else {
+          console.error('Cloudflare API sync error:', response.status, response.statusText);
           break;
         }
-        
-        cursor = list.cursor;
       }
+
+      console.log(`Sync R2 bucket stats from API: ${count} objects, ${totalSize} bytes (${formatSize(totalSize)})`);
+    } catch (e) {
+      console.error('Error calling Cloudflare API for sync:', e);
     }
 
     // 更新 KV 中的统计信息
@@ -528,68 +564,67 @@ async function handleStats(env: Env): Promise<Response> {
       }
     }
 
-    // 从 KV 获取增量统计
-    const statsKey = 'global:stats';
-    const statsData = await env.IMG_EXPIRY.get(statsKey);
-    
-    let kvTotalSize = 0;
-    let kvCount = 0;
-    
-    if (statsData) {
-      try {
-        const parsed = JSON.parse(statsData);
-        kvTotalSize = parsed.totalSize || 0;
-        kvCount = parsed.count || 0;
-      } catch (e) {
-        console.error('Error parsing stats:', e);
-      }
-    }
+    // 使用 Cloudflare R2 API 获取存储桶统计信息
+    let finalCount = 0;
+    let finalTotalSize = 0;
 
-    // 从 R2 遍历获取实际统计
-    let r2TotalSize = 0;
-    let r2Count = 0;
-    
     try {
-      const firstList = await env.IMAGES.list({ limit: 1000 });
-      
-      if (firstList.keys && firstList.keys.length > 0) {
-        for (const key of firstList.keys) {
-          r2TotalSize += key.size || 0;
-          r2Count++;
-        }
-      }
-      
-      // 继续分页（最多迭代 100 次，防止无限循环和超时）
-      if (firstList.truncated && firstList.cursor) {
-        let cursor = firstList.cursor;
-        const maxIterations = 100;
-        let iterations = 0;
-        
-        while (iterations < maxIterations) {
-          iterations++;
-          const list = await env.IMAGES.list({ limit: 1000, cursor: cursor });
-          
-          if (list.keys && list.keys.length > 0) {
-            for (const key of list.keys) {
-              r2TotalSize += key.size || 0;
-              r2Count++;
+      const accountId = 'adfb53e387c2b0452c567e03bfd35d9d';
+      const apiToken = 'jsO13YbRTDfHrPECZqH_ukaUBTWRy3fS8k1HEhAS';
+      const bucketName = 'img2url-images';
+
+      let cursor: string | undefined = undefined;
+      const maxIterations = 100;
+      let iterations = 0;
+
+      // 分页获取所有对象
+      while (iterations < maxIterations) {
+        iterations++;
+
+        const url = cursor
+          ? `https://api.cloudflare.com/client/v4/accounts/${accountId}/r2/buckets/${bucketName}/objects?cursor=${encodeURIComponent(cursor)}`
+          : `https://api.cloudflare.com/client/v4/accounts/${accountId}/r2/buckets/${bucketName}/objects`;
+
+        const response = await fetch(url, {
+          headers: {
+            'Authorization': `Bearer ${apiToken}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+
+          if (data.success && data.result && Array.isArray(data.result)) {
+            // 统计当前页的对象
+            for (const obj of data.result) {
+              finalCount++;
+              finalTotalSize += obj.size || 0;
             }
-          }
-          
-          if (!list.truncated || (list.keys && list.keys.length === 0)) {
+
+            console.log(`API iteration ${iterations}: ${data.result.length} objects, total: ${finalCount}, size: ${finalTotalSize} bytes`);
+
+            // 检查是否还有更多数据
+            if (data.result_info && data.result_info.is_truncated && data.result_info.cursor) {
+              cursor = data.result_info.cursor;
+            } else {
+              // 没有更多数据了
+              break;
+            }
+          } else {
+            console.error('Invalid API response format');
             break;
           }
-          
-          cursor = list.cursor;
+        } else {
+          console.error('Cloudflare API error:', response.status, response.statusText);
+          break;
         }
       }
-    } catch (e) {
-      console.error('Error listing R2:', e);
-    }
 
-    // 取两者中的较大值
-    const finalCount = Math.max(kvCount, r2Count);
-    const finalTotalSize = Math.max(kvTotalSize, r2TotalSize);
+      console.log(`R2 bucket stats from API: ${finalCount} objects, ${finalTotalSize} bytes (${formatSize(finalTotalSize)})`);
+    } catch (e) {
+      console.error('Error calling Cloudflare API:', e);
+    }
 
     // 从 KV 获取今日读取次数
     const todayKey = `stats:${new Date().toISOString().split('T')[0]}`;
@@ -643,7 +678,7 @@ async function handleStats(env: Env): Promise<Response> {
           readLimit: 1000000,
           readUsage: 0,
           limits: {
-            storage: '10 GB',
+            storage: formatSize(CONSTANTS.STORAGE_LIMIT),
             read: 1000000,
           },
           warnings: [],
@@ -659,10 +694,13 @@ function getWarnings(totalSize: number, storageLimit: number, readCount: number,
   const storagePercent = (totalSize / storageLimit) * 100;
   const readPercent = (readCount / readLimit) * 100;
 
-  if (storagePercent >= CONSTANTS.STORAGE_WARNING_THRESHOLD * 100) {
-    warnings.push('存储空间使用超过90%，请注意清理图片！');
-  } else if (storagePercent >= CONSTANTS.STORAGE_NOTIFY_THRESHOLD * 100) {
-    warnings.push('存储空间使用超过70%，建议开始清理旧图片。');
+  // 90% 强制停止警告
+  if (storagePercent >= 90) {
+    warnings.push('存储空间已达到 90% 上限，上传服务已暂停！');
+  }
+  // 70% 警告
+  else if (storagePercent >= 70) {
+    warnings.push('存储空间使用超过 70%，建议开始清理旧图片。');
   }
 
   if (readPercent >= CONSTANTS.READ_WARNING_THRESHOLD * 100) {
@@ -712,20 +750,73 @@ async function handleCleanup(env: Env): Promise<Response> {
 
 async function handleDebug(env: Env): Promise<Response> {
   try {
+    // 测试 R2 list 方法
     const list = await env.IMAGES.list({ limit: 10 });
+    
+    // 测试 R2 S3 API
+    let s3Result = null;
+    let s3Error = null;
+    
+    try {
+      const accessKeyId = env.R2_S3_ACCESS_KEY_ID;
+      const secretAccessKey = env.R2_S3_SECRET_ACCESS_KEY;
+      const endpoint = env.R2_S3_ENDPOINT;
+      const bucketName = env.R2_BUCKET_NAME || 'img2url-images';
+      
+      if (accessKeyId && secretAccessKey && endpoint) {
+        const s3Client = new S3Client({
+          region: 'auto',
+          endpoint: endpoint,
+          credentials: {
+            accessKeyId: accessKeyId,
+            secretAccessKey: secretAccessKey,
+          },
+        });
+        
+        const command = new ListObjectsV2Command({
+          Bucket: bucketName,
+          MaxKeys: 10,
+        });
+        
+        const response = await s3Client.send(command);
+        s3Result = {
+          count: response.Contents ? response.Contents.length : 0,
+          isTruncated: response.IsTruncated,
+          nextContinuationToken: response.NextContinuationToken,
+          objects: response.Contents ? response.Contents.map(obj => ({
+            key: obj.Key,
+            size: obj.Size,
+            lastModified: obj.LastModified,
+          })) : [],
+        };
+      }
+    } catch (e) {
+      s3Error = {
+        message: e instanceof Error ? e.message : String(e),
+        name: e instanceof Error ? e.name : 'Unknown',
+      };
+      console.error('S3 API error:', e);
+    }
     
     return corsResponse(
       '*',
       JSON.stringify({
-        bindingName: 'IMAGES',
-        truncated: list.truncated,
-        cursor: list.cursor,
-        keysCount: list.keys ? list.keys.length : 0,
-        keys: list.keys ? list.keys.map(k => ({
-          name: k.name,
-          size: k.size,
-          uploaded: k.uploaded
-        })) : []
+        r2List: {
+          bindingName: 'IMAGES',
+          truncated: list.truncated,
+          cursor: list.cursor,
+          keysCount: list.keys ? list.keys.length : 0,
+          keys: list.keys ? list.keys.map(k => ({
+            name: k.name,
+            size: k.size,
+            uploaded: k.uploaded
+          })) : []
+        },
+        s3Api: {
+          success: !!s3Result,
+          error: s3Error,
+          data: s3Result
+        }
       }),
       'application/json'
     );
@@ -738,39 +829,6 @@ async function handleDebug(env: Env): Promise<Response> {
       }),
       'application/json'
     );
-  }
-}
-
-async function updateStats(env: Env, sizeDelta: number, countDelta: number): Promise<void> {
-  try {
-    const statsKey = 'global:stats';
-    const statsData = await env.IMG_EXPIRY.get(statsKey);
-    
-    let totalSize = 0;
-    let count = 0;
-    
-    if (statsData) {
-      try {
-        const parsed = JSON.parse(statsData);
-        totalSize = parsed.totalSize || 0;
-        count = parsed.count || 0;
-      } catch (e) {
-        console.error('Error parsing stats:', e);
-      }
-    }
-    
-    totalSize += sizeDelta;
-    count += countDelta;
-    
-    await env.IMG_EXPIRY.put(statsKey, JSON.stringify({
-      totalSize,
-      count,
-      lastUpdate: Date.now(),
-    }), {
-      expirationTtl: 365 * 24 * 60 * 60
-    });
-  } catch (e) {
-    console.error('Error updating stats:', e);
   }
 }
 
@@ -909,7 +967,7 @@ async function handleApiDocs(env: Env): Promise<Response> {
               readLimit: 1000000,
               readUsage: 5,
               limits: {
-                storage: '10 GB',
+                storage: '10.00 GB',
                 read: 1000000,
               },
               warnings: [],

@@ -61,6 +61,39 @@ function formatSize(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
+// 百分比动画组件
+function AnimatedPercentage({ value }) {
+  const [displayValue, setDisplayValue] = useState(0);
+
+  useEffect(() => {
+    const duration = 1000; // 动画持续时间 1 秒
+    const steps = 60; // 动画步数
+    const stepValue = value / steps;
+    let currentStep = 0;
+
+    const timer = setInterval(() => {
+      currentStep++;
+      if (currentStep >= steps) {
+        setDisplayValue(value);
+        clearInterval(timer);
+      } else {
+        setDisplayValue(stepValue * currentStep);
+      }
+    }, duration / steps);
+
+    return () => clearInterval(timer);
+  }, [value]);
+
+  return <span>{displayValue.toFixed(2)}%</span>;
+}
+
+// 根据存储使用率返回状态类名
+function getStorageStatusClass(usage) {
+  if (usage >= 90) return 'status-critical';
+  if (usage >= 70) return 'status-warning';
+  return 'status-normal';
+}
+
 function App() {
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
@@ -426,6 +459,13 @@ function App() {
                 return sum;
               }, 0);
               uploadStatsRef.current.uploadedSize = completedFilesTotalSize;
+
+              // 显示存储警告
+              if (result.data.storageWarning) {
+                const storagePercent = result.data.storageUsage || 0;
+                setError(`存储空间已使用 ${storagePercent.toFixed(1)}%，建议开始清理旧图片以避免影响使用。`);
+                setTimeout(() => setError(''), 10000); // 10秒后自动消失
+              }
 
               fetchStats();
               resolve(result);
@@ -821,6 +861,10 @@ function App() {
           <span className="status-badge">
             <i className="bi bi-hdd"></i>
             <AnimatedSize value={stats?.totalSize || 0} />
+          </span>
+          <span className="status-badge">
+            <i className="bi bi-speedometer2"></i>
+            存储用量: <AnimatedPercentage value={stats?.storageUsage || 0} />
           </span>
           <span className="status-badge">
             <i className="bi bi-shield-check"></i>
