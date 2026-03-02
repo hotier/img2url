@@ -413,8 +413,25 @@ async function handleUpload(request: Request, env: Env): Promise<Response> {
       expirationTtl: 30 * 24 * 60 * 60
     });
 
-    // 清除统计缓存，确保下次获取最新统计
-    await env.IMG_EXPIRY.delete('stats:cache');
+    // 标记缓存需要更新，下次访问stats时会重新查询R2 API
+    await env.IMG_EXPIRY.put('stats:dirty', '1');
+
+    // 计算过期时间（UTC+8 格式）
+    let expirationTime: string | null = null;
+    if (expiration > 0) {
+      const expDate = new Date(Date.now() + expiration * 24 * 60 * 60 * 1000);
+      const formatter = new Intl.DateTimeFormat('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+        timeZone: 'Asia/Shanghai'
+      });
+      expirationTime = formatter.format(expDate).replace(/\//g, '-');
+    }
 
     return corsResponse(
       '*',
@@ -427,12 +444,9 @@ async function handleUpload(request: Request, env: Env): Promise<Response> {
           size: file.size,
           type: file.type,
           timestamp: formatTimestamp(),
-          expiration: expiration > 0 ? new Date(Date.now() + expiration * 24 * 60 * 60 * 1000).getTime() : null,
+          expirationTime,
           expirationDays: expiration > 0 ? expiration : null,
           remainingUploads: 500 - (uploadCount + 1),
-          captchaRequired: (uploadCount + 1) >= 300 && ((uploadCount + 1) % 50) === 0,
-          storageUsage: currentStoragePercent,
-          storageWarning: currentStoragePercent >= 70,
         },
       }),
       'application/json'
@@ -544,24 +558,24 @@ async function handleStats(env: Env): Promise<Response> {
     const STORAGE_LIMIT = CONSTANTS.STORAGE_LIMIT;
     const READ_LIMIT = CONSTANTS.READ_LIMIT;
 
+    // 检查是否有上传操作触发的更新标记
+    const isDirty = await env.IMG_EXPIRY.get('stats:dirty');
+    
     // 从 KV 获取缓存的统计信息
     const cachedStats = await env.IMG_EXPIRY.get('stats:cache');
-    const CACHE_DURATION = 5 * 60 * 1000; // 5分钟缓存
     
-    if (cachedStats) {
+    // 如果缓存存在且没有被标记为需要更新，直接返回缓存
+    if (cachedStats && !isDirty) {
       const parsed = JSON.parse(cachedStats);
-      // 如果缓存未过期，直接返回
-      if (Date.now() - parsed.lastUpdate < CACHE_DURATION) {
-        return corsResponse(
-          '*',
-          JSON.stringify({
-            success: true,
-            data: parsed.data,
-            cached: true,
-          }),
-          'application/json'
-        );
-      }
+      return corsResponse(
+        '*',
+        JSON.stringify({
+          success: true,
+          data: parsed.data,
+          cached: true,
+        }),
+        'application/json'
+      );
     }
 
     // 使用 Cloudflare R2 API 获取存储桶统计信息
@@ -646,13 +660,16 @@ async function handleStats(env: Env): Promise<Response> {
       warnings: getWarnings(finalTotalSize, STORAGE_LIMIT, readCount, READ_LIMIT),
     };
 
-    // 缓存统计信息
+    // 缓存统计信息（缓存1天）
     await env.IMG_EXPIRY.put('stats:cache', JSON.stringify({
       data: statsDataResponse,
       lastUpdate: Date.now(),
     }), {
-      expirationTtl: CACHE_DURATION / 1000
+      expirationTtl: 24 * 60 * 60  // 1天
     });
+
+    // 清除dirty标记
+    await env.IMG_EXPIRY.delete('stats:dirty');
 
     return corsResponse(
       '*',
@@ -870,15 +887,14 @@ async function handleApiDocs(env: Env): Promise<Response> {
             success: true,
             code: 200,
             data: {
-              url: `${customDomain}/abc12345.webp`,
-              fileName: 'abc12345.webp',
-              size: 123456,
-              type: 'image/webp',
-              timestamp: '2026-02-28 16:30:00',
-              expiration: null,
+              url: `${customDomain}/4345c068.webp`,
+              fileName: '4345c068.webp',
+              size: 1042,
+              type: 'image/png',
+              timestamp: '2026-03-02 20:46:57',
+              expirationTime: null,
               expirationDays: null,
-              remainingUploads: 500,
-              captchaRequired: false,
+              remainingUploads: 497,
             },
           },
           errors: [

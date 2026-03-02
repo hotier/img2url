@@ -285,6 +285,8 @@ body {
 .method-badge.post {
   background: #3b82f6;
   color: white;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-weight: 400;
 }
 
 .method-badge.put {
@@ -1595,6 +1597,10 @@ input:checked + .toggle::after {
 
   .status-badge {
     font-size: 12px;
+  }
+
+  .status-badge.hide-mobile {
+    display: none;
   }
 }
 
