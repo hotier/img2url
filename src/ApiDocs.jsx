@@ -1,6 +1,5 @@
 import { useState, useLayoutEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { API_URL } from './config';
 import hljs from 'highlight.js';
 import 'highlight.js/styles/github-dark.css';
 

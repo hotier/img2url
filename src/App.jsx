@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import Turnstile from './Turnstile';
-import { API_URL, API_DOMAIN } from './config';
 
 // 数字动画组件
 function AnimatedNumber({ value, suffix = '' }) {
