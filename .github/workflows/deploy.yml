@@ -43,7 +43,6 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           workingDirectory: worker
           command: deploy
-          environment: production
       
       - name: Deploy client to Pages
         uses: cloudflare/pages-action@v1

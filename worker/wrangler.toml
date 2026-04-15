@@ -12,8 +12,8 @@ compatibility_date = "2024-05-29"
 # id = "c725d606a76e4e85a8291ccbe2f2f3cc"
 # preview_id = "c725d606a76e4e85a8291ccbe2f2f3cc"
 
-[triggers]
-cron = ["0 */6 * * *"]  # 每6小时运行一次清理任务
+[env.production]
+# 生产环境配置
 
 [vars]
 CORS_ORIGIN = "*"
@@ -25,3 +25,7 @@ CUSTOM_DOMAIN = "https://api.hotier.cc.cd"
 # R2_S3_SECRET_ACCESS_KEY = ""
 # R2_S3_ENDPOINT = ""
 # R2_BUCKET_NAME = ""
+
+# 定时触发器将在部署后手动配置
+# [triggers]
+# crons = ["0 */6 * * *"]  # 每6小时运行一次清理任务
