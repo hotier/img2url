@@ -1,4 +1,4 @@
-name: Deploy to Cloudflare
+name: Deploy to Cloudflare Pages
 
 on:
   push:
@@ -18,9 +18,6 @@ jobs:
           node-version: '20'
           cache: 'npm'
       
-      - name: Install dependencies
-        run: npm install
-      
       - name: Fix file names
         run: |
           cd client
@@ -37,14 +34,7 @@ jobs:
       - name: Build client
         run: npm run deploy:client
       
-      - name: Deploy worker
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          workingDirectory: worker
-          command: deploy --env=""
-      
-      - name: Deploy client to Pages
+      - name: Deploy to Pages
         uses: cloudflare/pages-action@v1
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
