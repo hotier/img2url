@@ -21,16 +21,99 @@ function ApiDocs() {
   ];
 
   useLayoutEffect(() => {
-    fetch(`${API_URL}/api`)
-      .then(res => res.json())
-      .then(data => {
-        setApiData(data);
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error('Failed to load API docs:', err);
-        setLoading(false);
-      });
+    // 硬编码API文档数据，避免依赖后端API
+    const apiData = {
+      description: "Img2URL API 文档",
+      baseUrl: "https://img.hotier.cc.cd",
+      version: "1.0.0",
+      endpoints: [
+        {
+          path: "/upload",
+          method: "POST",
+          description: "上传图片",
+          parameters: [
+            {
+              name: "file",
+              type: "file",
+              required: true,
+              description: "图片文件"
+            },
+            {
+              name: "expiration",
+              type: "number",
+              required: false,
+              description: "有效期天数（0=永久）"
+            },
+            {
+              name: "turnstile",
+              type: "string",
+              required: false,
+              description: "Cloudflare Turnstile验证码token（高频率上传时必填）"
+            }
+          ],
+          response: {
+            success: {
+              code: 200,
+              data: {
+                url: "https://img.hotier.cc.cd/i/4345c068.webp",
+                fileName: "4345c068.webp",
+                size: 1042,
+                type: "image/png",
+                timestamp: "2026-03-02 20:46:57",
+                expirationTime: null,
+                expirationDays: null,
+                remainingUploads: 497
+              }
+            },
+            errors: [
+              {
+                code: 400,
+                error: "INVALID_FILE_TYPE",
+                message: "文件类型不支持"
+              },
+              {
+                code: 413,
+                error: "FILE_TOO_LARGE",
+                message: "文件大小超过限制"
+              }
+            ]
+          }
+        },
+        {
+          path: "/stats",
+          method: "GET",
+          description: "获取统计信息",
+          response: {
+            success: {
+              code: 200,
+              data: {
+                images: 100,
+                totalSize: 1234567890,
+                totalSizeFormatted: "1.15 GB",
+                storageUsage: 11.5,
+                readCount: 50000,
+                readLimit: 1000000,
+                readUsage: 5,
+                limits: {
+                  storage: "10.00 GB",
+                  read: 1000000
+                },
+                warnings: []
+              }
+            }
+          }
+        }
+      ],
+      examples: {
+        curl: "curl -X POST -F 'file=@image.jpg' https://img.hotier.cc.cd/upload",
+        javascript: "// 使用Fetch API\nconst formData = new FormData();\nformData.append('file', fileInput.files[0]);\n\nfetch('https://img.hotier.cc.cd/upload', {\n  method: 'POST',\n  body: formData\n})\n.then(response => response.json())\n.then(data => console.log(data));",
+        python: "# 使用requests库\nimport requests\n\nurl = 'https://img.hotier.cc.cd/upload'\nfiles = {'file': open('image.jpg', 'rb')}\n\nresponse = requests.post(url, files=files)\nprint(response.json())",
+        php: "// 使用cURL\n$ch = curl_init('https://img.hotier.cc.cd/upload');\ncurl_setopt($ch, CURLOPT_POST, true);\ncurl_setopt($ch, CURLOPT_POSTFIELDS, [\n  'file' => new CURLFile('image.jpg')\n]);\ncurl_setopt($ch, CURLOPT_RETURNTRANSFER, true);\n\n$response = curl_exec($ch);\ncurl_close($ch);\n\necho $response;"
+      }
+    };
+    
+    setApiData(apiData);
+    setLoading(false);
   }, []);
 
   // 单独处理示例代码的高亮
