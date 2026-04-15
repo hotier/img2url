@@ -42,10 +42,8 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-      - name: Create deployment archive
-        run: |
-          cd dist
-          tar -czf ../deployment.tar.gz .
+      - name: Copy functions to root
+        run: cp -r functions/* ./
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/pages-action@v1
@@ -53,6 +51,6 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           projectName: img2url
-          directory: dist
+          directory: .
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
           wranglerVersion: '3'
