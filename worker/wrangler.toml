@@ -2,18 +2,19 @@ name = "img2url-worker"
 main = "src/index.ts"
 compatibility_date = "2024-05-29"
 
-# KV和R2绑定将在部署后手动配置
-# [[r2_buckets]]
-# binding = "IMAGES"
-# bucket_name = "img2url-images"
-# 
-# [[kv_namespaces]]
-# binding = "IMG_EXPIRY"
-# id = "c725d606a76e4e85a8291ccbe2f2f3cc"
-# preview_id = "c725d606a76e4e85a8291ccbe2f2f3cc"
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "img2url-images"
+
+[[kv_namespaces]]
+binding = "IMG_EXPIRY"
+id = "c725d606a76e4e85a8291ccbe2f2f3cc"
+preview_id = "c725d606a76e4e85a8291ccbe2f2f3cc"
 
 [env.production]
-# 生产环境配置
+kv_namespaces = [
+  { binding = "IMG_EXPIRY", id = "c725d606a76e4e85a8291ccbe2f2f3cc", preview_id = "c725d606a76e4e85a8291ccbe2f2f3cc" }
+]
 
 [vars]
 CORS_ORIGIN = "*"
@@ -26,6 +27,5 @@ CUSTOM_DOMAIN = "https://api.hotier.cc.cd"
 # R2_S3_ENDPOINT = ""
 # R2_BUCKET_NAME = ""
 
-# 定时触发器将在部署后手动配置
-# [triggers]
-# crons = ["0 */6 * * *"]  # 每6小时运行一次清理任务
+[triggers]
+cron = ["0 */6 * * *"]  # 每6小时运行一次清理任务

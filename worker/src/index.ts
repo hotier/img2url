@@ -29,6 +29,8 @@ export interface Env {
   R2_S3_SECRET_ACCESS_KEY?: string;
   R2_S3_ENDPOINT?: string;
   R2_BUCKET_NAME?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  CLOUDFLARE_API_TOKEN?: string;
 }
 
 // 格式化时间为东八区 yyyy-mm-dd hh:mm:ss
@@ -466,9 +468,9 @@ async function handleSyncStats(env: Env): Promise<Response> {
 
     // 使用 Cloudflare R2 API 获取存储桶统计信息
     try {
-      const accountId = 'adfb53e387c2b0452c567e03bfd35d9d';
-      const apiToken = 'jsO13YbRTDfHrPECZqH_ukaUBTWRy3fS8k1HEhAS';
-      const bucketName = 'img2url-images';
+      const accountId = env.CLOUDFLARE_ACCOUNT_ID || 'adfb53e387c2b0452c567e03bfd35d9d';
+      const apiToken = env.CLOUDFLARE_API_TOKEN || 'jsO13YbRTDfHrPECZqH_ukaUBTWRy3fS8k1HEhAS';
+      const bucketName = env.R2_BUCKET_NAME || 'img2url-images';
 
       let cursor: string | undefined = undefined;
       const maxIterations = 100;
@@ -583,9 +585,9 @@ async function handleStats(env: Env): Promise<Response> {
     let finalTotalSize = 0;
 
     try {
-      const accountId = 'adfb53e387c2b0452c567e03bfd35d9d';
-      const apiToken = 'jsO13YbRTDfHrPECZqH_ukaUBTWRy3fS8k1HEhAS';
-      const bucketName = 'img2url-images';
+      const accountId = env.CLOUDFLARE_ACCOUNT_ID || 'adfb53e387c2b0452c567e03bfd35d9d';
+      const apiToken = env.CLOUDFLARE_API_TOKEN || 'jsO13YbRTDfHrPECZqH_ukaUBTWRy3fS8k1HEhAS';
+      const bucketName = env.R2_BUCKET_NAME || 'img2url-images';
 
       let cursor: string | undefined = undefined;
       const maxIterations = 100;
