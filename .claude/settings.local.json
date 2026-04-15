@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git remote:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"feat: Add GitHub Actions auto-deploy and fix upload issues:*)",
+      "Bash(git push:*)"
+    ]
+  }
+}

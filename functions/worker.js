@@ -73,9 +73,14 @@ async function handleUpload(request, env) {
   try {
     const formData = await request.formData();
     const file = formData.get('file');
+    const expiration = parseInt(formData.get('expiration') || '0', 10);
 
     if (!file || file.size === 0) {
       return errorResponse(400, 'NO_FILE_PROVIDED', 'No file provided');
+    }
+
+    if (expiration < 0 || expiration > 365) {
+      return errorResponse(400, 'INVALID_EXPIRATION', 'Expiration must be between 0 and 365 days');
     }
 
     if (file.size > CONSTANTS.MAX_IMAGE_SIZE) {
@@ -116,19 +121,26 @@ async function handleUpload(request, env) {
         size: file.size,
         type: file.type,
         message: 'File already exists',
+        expiration: 0,
+        expirationDays: 0
       });
     }
 
+    const expiryDate = expiration > 0
+      ? new Date(Date.now() + expiration * 24 * 60 * 60 * 1000)
+      : null;
+
     await env.IMAGES.put(fileName, arrayBuffer, {
       httpMetadata: { contentType: file.type },
-      customMetadata: { uploadedAt: new Date().toISOString() }
-    });
-
-    await env.IMG_EXPIRY.put(fileName, new Date().toISOString(), {
-      expirationTtl: CONSTANTS.MAX_AGE
+      customMetadata: {
+        uploadedAt: new Date().toISOString(),
+        expiration: expiryDate ? expiryDate.toISOString() : '0'
+      }
     });
 
     const imageUrl = `${env.CUSTOM_DOMAIN || 'https://api.hotier.cc.cd'}/i/${fileName}`;
+
+    const expirationDays = expiration > 0 ? expiration : null;
 
     return successResponse({
       url: imageUrl,
@@ -136,6 +148,8 @@ async function handleUpload(request, env) {
       size: file.size,
       type: file.type,
       uploadedAt: formatTimestamp(),
+      expiration: expirationDays,
+      expirationDays: expirationDays
     });
   } catch (error) {
     console.error('Upload error:', error);
@@ -193,20 +207,21 @@ async function handleCleanup(env) {
     let deletedCount = 0;
 
     do {
-      const keys = await env.IMG_EXPIRY.list({ cursor, limit: 1000 });
-      
-      for (const key of keys.keys) {
+      const objects = await env.IMAGES.list({ cursor, limit: 1000 });
+
+      for (const object of objects.objects) {
         const now = Date.now();
-        const expiry = new Date(key.expiration).getTime();
-        
-        if (expiry <= now) {
-          await env.IMAGES.delete(key.name);
-          await env.IMG_EXPIRY.delete(key.name);
+        const expiry = object.customMetadata?.expiration
+          ? new Date(object.customMetadata.expiration).getTime()
+          : now;
+
+        if (expiry > 0 && expiry <= now) {
+          await env.IMAGES.delete(object.key);
           deletedCount++;
         }
       }
 
-      cursor = keys.cursor;
+      cursor = objects.cursor;
     } while (cursor);
 
     return successResponse({ deleted: deletedCount, timestamp: formatTimestamp() });
@@ -265,8 +280,8 @@ async function handleSyncStats(request, env) {
   }
 
   try {
-    const accountId = env.CLOUDFLARE_ACCOUNT_ID || 'adfb53e387c2b0452c567e03bfd35d9d';
-    const apiToken = env.CLOUDFLARE_API_TOKEN || 'jsO13YbRTDfHrPECZqH_ukaUBTWRy3fS8k1HEhAS';
+    const accountId = env.CLOUDFLARE_ACCOUNT_ID || '';
+    const apiToken = env.CLOUDFLARE_API_TOKEN || '';
     const bucketName = env.R2_BUCKET_NAME || 'img2url-images';
 
     let cursor = undefined;

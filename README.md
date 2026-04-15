@@ -15,6 +15,23 @@
 - ✅ 短链接访问
 - ✅ 定时清理过期图片
 
+## 快速开始
+
+### Cloudflare Pages 部署（推荐）
+
+```bash
+# 下载并运行部署脚本
+deploy.bat          # Windows
+deploy.sh           # macOS/Linux
+
+# 或手动部署
+npm install
+npm run build
+wrangler pages deploy dist
+```
+
+详细部署指南请查看 [Cloudflare Pages 部署文档](./CF_PAGES_DEPLOY.md)
+
 ## 技术栈
 
 - **前端**：React + Vite
