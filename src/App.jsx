@@ -497,11 +497,14 @@ function App() {
             }
           } catch (err) {
             console.error('Parse error:', err);
-            setError('服务器响应错误');
+            console.error('Response text:', xhr.responseText);
+            setError('服务器响应格式错误');
             reject(err);
           }
         } else {
-          setError(`上传失败 (${xhr.status})`);
+          console.error('Upload failed with status:', xhr.status);
+          console.error('Response text:', xhr.responseText);
+          setError(`上传失败 (${xhr.status}): ${xhr.statusText}`);
           reject(new Error(`HTTP ${xhr.status}`));
         }
         setUploading(false);
@@ -509,7 +512,7 @@ function App() {
 
       xhr.addEventListener('error', () => {
         console.error('Upload error');
-        setError('网络错误，请重试');
+        setError('网络错误，请检查您的网络连接');
         setUploading(false);
         reject(new Error('Network error'));
       });
@@ -601,18 +604,23 @@ function App() {
               reject(result);
             }
           } catch (err) {
-            setError('服务器响应错误');
+            console.error('Parse error:', err);
+            console.error('Response text:', xhr.responseText);
+            setError('服务器响应格式错误');
             reject(err);
           }
         } else {
-          setError(`上传失败 (${xhr.status})`);
+          console.error('Upload failed with status:', xhr.status);
+          console.error('Response text:', xhr.responseText);
+          setError(`上传失败 (${xhr.status}): ${xhr.statusText}`);
           reject(new Error(`HTTP ${xhr.status}`));
         }
         setUploading(false);
       });
 
       xhr.addEventListener('error', () => {
-        setError('网络错误，请重试');
+        console.error('Upload error');
+        setError('网络错误，请检查您的网络连接');
         setUploading(false);
         reject(new Error('Network error'));
       });
