@@ -391,7 +391,9 @@ async function handlePreview(request, env) {
   }
 }
 
-export async function fetch(request, env) {
+// Cloudflare Pages Functions 入口 - 导出 onRequest
+export async function onRequest(context) {
+  const { request, env } = context;
   const url = new URL(request.url);
   const path = url.pathname;
   console.log(`[DEBUG] Request received: ${request.method} ${path}`);
