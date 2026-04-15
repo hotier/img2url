@@ -510,7 +510,7 @@ function App() {
         reject(new Error('Upload aborted'));
       });
 
-      xhr.open('POST', `${API_DOMAIN}/upload`);
+      xhr.open('POST', '/upload');
       xhr.send(formData);
     });
   };
@@ -608,7 +608,7 @@ function App() {
         reject(new Error('Network error'));
       });
 
-      xhr.open('POST', `${API_DOMAIN}/upload`);
+      xhr.open('POST', '/upload');
       xhr.send(formData);
     });
   };
