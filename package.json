@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && mkdir -p dist/functions && cp -r functions/* dist/functions/ 2>/dev/null || xcopy /E /I /Y functions dist\\functions",
+    "build": "vite build && mkdir -p dist/functions && cp -r functions/* dist/functions/",
     "preview": "vite preview",
     "deploy": "npm run build && wrangler pages deploy dist",
     "dev:worker": "wrangler dev"
