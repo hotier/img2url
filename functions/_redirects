@@ -1,0 +1,9 @@
+# API routes
+/upload 200
+/delete/* 200
+/cleanup 200
+/stats 200
+/sync-stats 200
+/health 200
+/preview 200
+/i/* 200
