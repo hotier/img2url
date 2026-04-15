@@ -7,7 +7,7 @@
     "dev:worker": "wrangler dev worker/src/index.ts",
     "dev:client": "cd client && npm run dev",
     "deploy:worker": "wrangler deploy worker/src/index.ts",
-    "deploy:client": "cd client && npx vite build"
+    "deploy:client": "cd client && npm install && npx vite build"
   },
   "devDependencies": {
     "wrangler": "^4.69.0"
