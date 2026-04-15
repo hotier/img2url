@@ -13,11 +13,7 @@ preview_id = "c725d606a76e4e85a8291ccbe2f2f3cc"
 
 [env.production]
 kv_namespaces = [
-  {
-    binding = "IMG_EXPIRY",
-    id = "c725d606a76e4e85a8291ccbe2f2f3cc",
-    preview_id = "c725d606a76e4e85a8291ccbe2f2f3cc"
-  }
+  { binding = "IMG_EXPIRY", id = "c725d606a76e4e85a8291ccbe2f2f3cc", preview_id = "c725d606a76e4e85a8291ccbe2f2f3cc" }
 ]
 
 [triggers]
