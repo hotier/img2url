@@ -24,8 +24,13 @@ jobs:
       - name: Fix file names
         run: |
           cd client
-          if [ -f "vite.config.js" ]; then
-            mv "vite.config.js" vite.config.js
+          # 检查并修复可能的文件名问题
+          if [ -f "vite。config。js" ]; then
+            mv "vite。config。js" vite.config.js
+          elif [ -f "vite.config.js" ]; then
+            echo "File name is already correct: vite.config.js"
+          else
+            echo "No vite.config.js file found"
           fi
           ls -la
       
