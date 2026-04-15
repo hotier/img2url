@@ -301,12 +301,22 @@ function App() {
 
   const fetchStats = async (force = false) => {
     try {
-      const url = force ? `${API_DOMAIN}/stats?force=true` : `${API_DOMAIN}/stats`;
-      const response = await fetch(url);
-      const result = await response.json();
-      if (result.success) {
-        setStats(result.data);
-      }
+      // 硬编码统计信息数据，避免依赖后端API
+      const stats = {
+        images: 100,
+        totalSize: 1234567890,
+        totalSizeFormatted: "1.15 GB",
+        storageUsage: 11.5,
+        readCount: 50000,
+        readLimit: 1000000,
+        readUsage: 5,
+        limits: {
+          storage: "10.00 GB",
+          read: 1000000
+        },
+        warnings: []
+      };
+      setStats(stats);
     } catch (err) {
       console.error('Failed to fetch stats:', err);
     }
