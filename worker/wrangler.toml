@@ -1,0 +1,35 @@
+name = "img2url-worker"
+main = "src/index.ts"
+compatibility_date = "2024-05-29"
+
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "img2url-images"
+
+[[kv_namespaces]]
+binding = "IMG_EXPIRY"
+id = "c725d606a76e4e85a8291ccbe2f2f3cc"
+preview_id = "c725d606a76e4e85a8291ccbe2f2f3cc"
+
+[env.production]
+kv_namespaces = [
+  {
+    binding = "IMG_EXPIRY",
+    id = "c725d606a76e4e85a8291ccbe2f2f3cc",
+    preview_id = "c725d606a76e4e85a8291ccbe2f2f3cc"
+  }
+]
+
+[triggers]
+cron = ["0 */6 * * *"]  # 每6小时运行一次清理任务
+
+[vars]
+CORS_ORIGIN = "*"
+CUSTOM_DOMAIN = "https://api.hotier.cc.cd"
+
+# 这些值将在Cloudflare控制台或GitHub Actions中设置
+# TURNSTILE_SECRET_KEY = ""
+# R2_S3_ACCESS_KEY_ID = ""
+# R2_S3_SECRET_ACCESS_KEY = ""
+# R2_S3_ENDPOINT = ""
+# R2_BUCKET_NAME = ""

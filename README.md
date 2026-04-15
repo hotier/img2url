@@ -1,163 +1,160 @@
-# img2url
+# Img2URL - 图片转URL服务
 
-图片转URL服务 - 基于Cloudflare R2
+基于Cloudflare R2的免费图片托管服务，支持快速上传图片生成URL，永久存储，无需注册，支持批量上传，API接口，适用于博客、论坛、社交媒体等场景。
 
 ## 功能特性
 
-- 支持多种图片格式上传
-- 自动生成图片访问URL
-- 基于Cloudflare R2对象存储
-- 前后端分离架构
-- 支持API文档查看
+- ✅ 免费图片托管
+- ✅ 支持多种图片格式（JPG、PNG、GIF、WebP等）
+- ✅ 自动压缩图片（GIF保持原格式）
+- ✅ 支持设置图片有效期
+- ✅ 防重复上传（基于文件哈希）
+- ✅ 访问频率限制
+- ✅ 存储空间监控
+- ✅ API接口支持
+- ✅ 短链接访问
+- ✅ 定时清理过期图片
 
-## 项目结构
+## 技术栈
 
+- **前端**：React + Vite
+- **后端**：Cloudflare Workers
+- **存储**：Cloudflare R2
+- **缓存**：Cloudflare KV
+
+## 部署步骤
+
+### 1. 准备工作
+
+1. 注册Cloudflare账号
+2. 创建R2存储桶，命名为 `img2url-images`
+3. 创建KV命名空间，用于存储元数据和统计信息
+4. 生成Cloudflare API Token，需要以下权限：
+   - Workers Scripts: Edit
+   - R2: Edit
+   - KV: Edit
+   - Pages: Edit
+
+### 2. 配置环境变量
+
+在GitHub仓库的Settings > Secrets and variables > Actions中添加以下 secrets：
+
+- `CLOUDFLARE_API_TOKEN` - Cloudflare API Token
+- `CLOUDFLARE_ACCOUNT_ID` - Cloudflare账号ID
+
+### 3. 自动部署
+
+1. 将代码推送到GitHub仓库的main分支
+2. GitHub Actions会自动执行部署流程：
+   - 安装依赖
+   - 构建前端项目
+   - 部署Worker到Cloudflare
+   - 部署前端到Cloudflare Pages
+
+### 4. 配置Worker环境变量
+
+在Cloudflare Workers控制台中，为worker添加以下环境变量：
+
+- `TURNSTILE_SECRET_KEY` - Cloudflare Turnstile密钥（可选，用于人机验证）
+- `R2_S3_ACCESS_KEY_ID` - R2 S3兼容API访问密钥
+- `R2_S3_SECRET_ACCESS_KEY` - R2 S3兼容API密钥
+- `R2_S3_ENDPOINT` - R2 S3兼容API端点
+- `R2_BUCKET_NAME` - R2存储桶名称
+
+### 5. 配置自定义域名
+
+在Cloudflare Pages和Workers中配置自定义域名：
+
+- 前端：`https://img.hotier.cc.cd`
+- API：`https://api.hotier.cc.cd`
+
+## API文档
+
+### 上传图片
+
+**POST /upload**
+
+参数：
+- `file` - 图片文件（必填）
+- `expiration` - 有效期天数（可选，0=永久）
+- `turnstile` - Cloudflare Turnstile验证码token（高频率上传时必填）
+
+响应：
+```json
+{
+  "success": true,
+  "code": 200,
+  "data": {
+    "url": "https://api.hotier.cc.cd/4345c068.webp",
+    "fileName": "4345c068.webp",
+    "size": 1042,
+    "type": "image/png",
+    "timestamp": "2026-03-02 20:46:57",
+    "expirationTime": null,
+    "expirationDays": null,
+    "remainingUploads": 497
+  }
+}
 ```
-img2url/
-├── client/          # 前端应用 (React + Vite)
-├── worker/          # Cloudflare Worker 后端
-├── pages/           # Cloudflare Pages 配置
-└── wrangler.toml    # Cloudflare 部署配置
+
+### 获取统计信息
+
+**GET /stats**
+
+响应：
+```json
+{
+  "success": true,
+  "data": {
+    "images": 100,
+    "totalSize": 1234567890,
+    "totalSizeFormatted": "1.15 GB",
+    "storageUsage": 11.5,
+    "readCount": 50000,
+    "readLimit": 1000000,
+    "readUsage": 5,
+    "limits": {
+      "storage": "10.00 GB",
+      "read": 1000000
+    },
+    "warnings": []
+  },
+  "cached": false
+}
 ```
-
-## 部署指南
-
-### 前置要求
-
-1. 注册 [Cloudflare](https://dash.cloudflare.com/) 账号
-2. 安装 Node.js (建议 v18+)
-3. 安装 Wrangler CLI
-   ```bash
-   npm install -g wrangler
-   ```
-
-### 部署步骤
-
-#### 1. 安装依赖
-
-```bash
-# 安装根目录依赖
-npm install
-
-# 安装客户端依赖
-cd client
-npm install
-cd ..
-
-# 安装 Worker 依赖
-cd worker
-npm install
-cd ..
-```
-
-#### 2. 配置 Wrangler
-
-登录 Cloudflare 账号：
-```bash
-wrangler login
-```
-
-创建 R2 存储桶（用于存储图片）：
-```bash
-wrangler r2 bucket create img2url-images
-```
-
-#### 3. 部署 Worker
-
-部署 Cloudflare Worker：
-```bash
-npm run deploy:worker
-```
-
-#### 4. 部署前端
-
-构建并部署前端到 Cloudflare Pages：
-```bash
-cd client
-npm run build
-```
-
-然后手动将 `client/dist` 目录部署到 Cloudflare Pages，或使用以下命令：
-
-```bash
-cd client
-npx wrangler pages deploy dist --project-name=img2url
-```
-
-### 环境变量配置
-
-如需自定义配置，请修改以下文件：
-
-- `wrangler.toml` - Worker 部署配置
-- `wrangler.worker.toml` - Worker 独立配置
-- `client/src/config.js` - 前端 API 配置
 
 ## 本地开发
 
-### 启动开发环境
-
-同时启动前端和后端开发服务器：
+### 启动开发服务器
 
 ```bash
 npm run dev
 ```
 
-或分别启动：
+### 构建生产版本
 
 ```bash
-# 启动 Worker 开发服务器
-npm run dev:worker
-
-# 启动前端开发服务器（新终端）
-npm run dev:client
+npm run deploy:client  # 构建前端
+npm run deploy:worker  # 部署worker
 ```
 
-前端访问地址：http://localhost:5173
+## 限制说明
 
-### 访问 API 文档
+- 单个文件大小限制：10MB
+- 图片尺寸限制：10000x10000
+- 每日上传限制：500次/IP
+- 每分钟上传限制：30次/IP
+- 每分钟读取限制：100次/IP
+- 总存储空间限制：10GB
+- 每日读取限制：100万次
 
-启动项目后，访问前端页面即可查看完整的 API 文档和使用说明。
+## 注意事项
 
-## 使用方法
-
-### 1. 上传图片
-
-1. 打开应用页面
-2. 点击或拖拽图片到上传区域
-3. 等待上传完成
-4. 复制生成的图片 URL
-
-### 2. API 使用
-
-#### 上传图片接口
-
-```
-POST /upload
-Content-Type: multipart/form-data
-
-参数：
-- file: 图片文件
-```
-
-#### 获取图片列表接口
-
-```
-GET /images
-```
-
-#### 删除图片接口
-
-```
-DELETE /image/:id
-```
-
-## 技术栈
-
-- **前端**: React 18, Vite, JSX
-- **后端**: Cloudflare Worker (TypeScript)
-- **存储**: Cloudflare R2
-- **部署**: Cloudflare Workers & Pages
+1. 请遵守相关法律法规，不要上传违法违规内容
+2. 大文件上传可能会比较慢，请耐心等待
+3. 存储空间达到90%时会暂停上传服务
+4. 高频率上传需要进行人机验证
 
 ## 许可证
 
-MIT
+MIT License
