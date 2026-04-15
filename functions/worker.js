@@ -117,12 +117,14 @@ async function handleUpload(request, env) {
       const existingUrl = `${env.CUSTOM_DOMAIN || 'https://api.hotier.cc.cd'}/i/${fileName}`;
       return successResponse({
         url: existingUrl,
-        filename: fileName,
+        fileName: fileName,
         size: file.size,
         type: file.type,
         message: 'File already exists',
         expiration: 0,
-        expirationDays: 0
+        expirationDays: 0,
+        duplicate: true,
+        uploadedAt: existingObject.customMetadata?.uploadedAt || null
       });
     }
 
@@ -134,7 +136,8 @@ async function handleUpload(request, env) {
       httpMetadata: { contentType: file.type },
       customMetadata: {
         uploadedAt: new Date().toISOString(),
-        expiration: expiryDate ? expiryDate.toISOString() : '0'
+        expiration: expiryDate ? expiryDate.toISOString() : '0',
+        originalName: file.name
       }
     });
 
@@ -144,12 +147,14 @@ async function handleUpload(request, env) {
 
     return successResponse({
       url: imageUrl,
-      filename: fileName,
+      fileName: fileName,
       size: file.size,
       type: file.type,
       uploadedAt: formatTimestamp(),
       expiration: expirationDays,
-      expirationDays: expirationDays
+      expirationDays: expirationDays,
+      duplicate: false,
+      uploadCount: 1
     });
   } catch (error) {
     console.error('Upload error:', error);
@@ -192,7 +197,6 @@ async function handleDelete(request, env, imageName) {
     }
 
     await env.IMAGES.delete(imageName);
-    await env.IMG_EXPIRY.delete(imageName);
 
     return successResponse({ message: 'Image deleted successfully' });
   } catch (error) {
@@ -211,11 +215,17 @@ async function handleCleanup(env) {
 
       for (const object of objects.objects) {
         const now = Date.now();
-        const expiry = object.customMetadata?.expiration
-          ? new Date(object.customMetadata.expiration).getTime()
-          : now;
-
-        if (expiry > 0 && expiry <= now) {
+        const expiration = object.customMetadata?.expiration;
+        
+        // 只有设置了过期时间且过期时间不为 '0' 的图片才检查是否过期
+        if (!expiration || expiration === '0') {
+          // 永久图片，跳过
+          continue;
+        }
+        
+        const expiry = new Date(expiration).getTime();
+        
+        if (expiry <= now) {
           await env.IMAGES.delete(object.key);
           deletedCount++;
         }
@@ -243,7 +253,7 @@ async function handleStats(request, env) {
     let cursor = null;
     do {
       const objects = await env.IMAGES.list({ cursor, limit: 1000 });
-      
+
       for (const object of objects.objects) {
         totalSize += object.size || 0;
         count++;
@@ -381,49 +391,45 @@ async function handlePreview(request, env) {
   }
 }
 
-export function createWorker(env) {
-  return {
-    async fetch(request, env, ctx) {
-      const url = new URL(request.url);
-      const path = url.pathname;
-      console.log(`[DEBUG] Request received: ${request.method} ${path}`);
+export async function fetch(request, env) {
+  const url = new URL(request.url);
+  const path = url.pathname;
+  console.log(`[DEBUG] Request received: ${request.method} ${path}`);
 
-      if (request.method === 'OPTIONS') {
-        console.log(`[DEBUG] Handling OPTIONS request for ${path}`);
-        return corsResponse();
-      }
+  if (request.method === 'OPTIONS') {
+    console.log(`[DEBUG] Handling OPTIONS request for ${path}`);
+    return corsResponse();
+  }
 
-      if (path === '/upload') {
-        console.log(`[DEBUG] Handling ${request.method} request for /upload`);
-        return handleUpload(request, env);
-      } else if (path.startsWith('/i/')) {
-        const imageName = path.substring(3);
-        console.log(`[DEBUG] Handling ${request.method} request for /i/${imageName}`);
-        return handleImage(request, env, imageName);
-      } else if (path.startsWith('/delete/')) {
-        const imageName = path.substring(8);
-        console.log(`[DEBUG] Handling ${request.method} request for /delete/${imageName}`);
-        return handleDelete(request, env, imageName);
-      } else if (path === '/cleanup') {
-        console.log(`[DEBUG] Handling ${request.method} request for /cleanup`);
-        return handleCleanup(env);
-      } else if (path === '/stats') {
-        console.log(`[DEBUG] Handling ${request.method} request for /stats`);
-        return handleStats(request, env);
-      } else if (path === '/sync-stats') {
-        console.log(`[DEBUG] Handling ${request.method} request for /sync-stats`);
-        return handleSyncStats(request, env);
-      } else if (path === '/health') {
-        console.log(`[DEBUG] Handling ${request.method} request for /health`);
-        return handleHealth(request);
-      } else if (path === '/preview') {
-        console.log(`[DEBUG] Handling ${request.method} request for /preview`);
-        return handlePreview(request, env);
-      } else {
-        console.log(`[DEBUG] Handling ${request.method} request for ${path} (404)`);
-        return errorResponse(404, 'NOT_FOUND', 'Endpoint not found');
-      }
-    }
-  };
+  if (path === '/upload') {
+    console.log(`[DEBUG] Handling ${request.method} request for /upload`);
+    return handleUpload(request, env);
+  } else if (path.startsWith('/i/')) {
+    const imageName = path.substring(3);
+    console.log(`[DEBUG] Handling ${request.method} request for /i/${imageName}`);
+    return handleImage(request, env, imageName);
+  } else if (path.startsWith('/delete/')) {
+    const imageName = path.substring(8);
+    console.log(`[DEBUG] Handling ${request.method} request for /delete/${imageName}`);
+    return handleDelete(request, env, imageName);
+  } else if (path === '/cleanup') {
+    console.log(`[DEBUG] Handling ${request.method} request for /cleanup`);
+    return handleCleanup(env);
+  } else if (path === '/stats') {
+    console.log(`[DEBUG] Handling ${request.method} request for /stats`);
+    return handleStats(request, env);
+  } else if (path === '/sync-stats') {
+    console.log(`[DEBUG] Handling ${request.method} request for /sync-stats`);
+    return handleSyncStats(request, env);
+  } else if (path === '/health') {
+    console.log(`[DEBUG] Handling ${request.method} request for /health`);
+    return handleHealth(request);
+  } else if (path === '/preview') {
+    console.log(`[DEBUG] Handling ${request.method} request for /preview`);
+    return handlePreview(request, env);
+  } else {
+    console.log(`[DEBUG] Handling ${request.method} request for ${path} (404)`);
+    return errorResponse(404, 'NOT_FOUND', 'Endpoint not found');
+  }
 }
 

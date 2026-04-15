@@ -1,7 +1,5 @@
-import { createWorker } from './worker';
+import { fetch as workerFetch } from './worker';
 
 export default {
-  fetch: (request, env, ctx) => {
-    return createWorker(env).fetch(request, env, ctx);
-  }
+  fetch: workerFetch
 };

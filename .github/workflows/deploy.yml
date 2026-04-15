@@ -37,13 +37,15 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build frontend
         run: npm run build
 
-      - name: Copy functions to root
-        run: cp -r functions/* ./
+      - name: Prepare Functions directory
+        run: |
+          # 复制 functions 目录到 dist，确保 Pages Functions 可用
+          cp -r functions/. dist/functions/
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/pages-action@v1
@@ -51,6 +53,6 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           projectName: img2url
-          directory: .
+          directory: dist
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
           wranglerVersion: '3'
