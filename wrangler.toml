@@ -7,10 +7,8 @@ directory = "./dist"
 [dev]
 port = 8787
 
-# R2 存储桶绑定（用于本地开发）
-[[r2_buckets]]
-binding = "IMAGES"
-bucket_name = "img2url-images"
+# 注意: R2 bucket 绑定在 Cloudflare Pages Dashboard 中配置
+# 不要在此处添加 [[r2_buckets]] 配置，否则会导致 GitHub Actions 部署失败
 
 [env.production]
 NODE_ENV = "production"
