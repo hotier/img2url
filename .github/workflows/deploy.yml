@@ -21,6 +21,14 @@ jobs:
       - name: Install dependencies
         run: npm install
       
+      - name: Fix file names
+        run: |
+          cd client
+          if [ -f "vite。config。js" ]; then
+            mv "vite。config。js" vite.config.js
+          fi
+          ls -la
+      
       - name: Build client
         run: npm run deploy:client
       
