@@ -433,3 +433,10 @@ export async function fetch(request, env) {
   }
 }
 
+// Cloudflare Pages Functions 入口
+export function createWorker(env) {
+  return {
+    fetch: (request, env, ctx) => fetch(request, env)
+  };
+}
+
