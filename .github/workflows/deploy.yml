@@ -9,6 +9,7 @@ on:
       - 'functions/**'
       - 'index.html'
       - 'package.json'
+      - 'package-lock.json'
       - 'vite.config.js'
       - 'wrangler.toml'
       - '.github/workflows/deploy.yml'
