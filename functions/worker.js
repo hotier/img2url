@@ -371,30 +371,41 @@ export function createWorker(env) {
     async fetch(request, env, ctx) {
       const url = new URL(request.url);
       const path = url.pathname;
+      console.log(`[DEBUG] Request received: ${request.method} ${path}`);
 
       if (request.method === 'OPTIONS') {
+        console.log(`[DEBUG] Handling OPTIONS request for ${path}`);
         return corsResponse();
       }
 
       if (path === '/upload') {
+        console.log(`[DEBUG] Handling ${request.method} request for /upload`);
         return handleUpload(request, env);
       } else if (path.startsWith('/i/')) {
         const imageName = path.substring(3);
+        console.log(`[DEBUG] Handling ${request.method} request for /i/${imageName}`);
         return handleImage(request, env, imageName);
       } else if (path.startsWith('/delete/')) {
         const imageName = path.substring(8);
+        console.log(`[DEBUG] Handling ${request.method} request for /delete/${imageName}`);
         return handleDelete(request, env, imageName);
       } else if (path === '/cleanup') {
+        console.log(`[DEBUG] Handling ${request.method} request for /cleanup`);
         return handleCleanup(env);
       } else if (path === '/stats') {
+        console.log(`[DEBUG] Handling ${request.method} request for /stats`);
         return handleStats(request, env);
       } else if (path === '/sync-stats') {
+        console.log(`[DEBUG] Handling ${request.method} request for /sync-stats`);
         return handleSyncStats(request, env);
       } else if (path === '/health') {
+        console.log(`[DEBUG] Handling ${request.method} request for /health`);
         return handleHealth(request);
       } else if (path === '/preview') {
+        console.log(`[DEBUG] Handling ${request.method} request for /preview`);
         return handlePreview(request, env);
       } else {
+        console.log(`[DEBUG] Handling ${request.method} request for ${path} (404)`);
         return errorResponse(404, 'NOT_FOUND', 'Endpoint not found');
       }
     }
