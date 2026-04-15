@@ -28,4 +28,4 @@ CUSTOM_DOMAIN = "https://api.hotier.cc.cd"
 # R2_BUCKET_NAME = ""
 
 [triggers]
-cron = ["0 */6 * * *"]  # 每6小时运行一次清理任务
+crons = ["0 */6 * * *"]  # 每6小时运行一次清理任务
