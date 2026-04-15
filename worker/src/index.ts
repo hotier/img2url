@@ -161,6 +161,9 @@ async function handleUpload(request: Request, env: Env): Promise<Response> {
       return errorResponse(400, 'FILE_TOO_LARGE', `File size exceeds ${maxSize / 1024 / 1024}MB limit`);
     }
 
+    // 计算文件哈希，检查是否重复上传
+    const arrayBuffer = await file.arrayBuffer();
+
     // 验证图片尺寸（在压缩前检查）
     try {
       const imageBitmap = await createImageBitmap(new Blob([arrayBuffer], { type: file.type }));
@@ -173,9 +176,6 @@ async function handleUpload(request: Request, env: Env): Promise<Response> {
       // 如果无法创建ImageBitmap，可能在压缩时失败，继续处理
       console.warn('Unable to validate image dimensions:', e);
     }
-
-    // 计算文件哈希，检查是否重复上传
-    const arrayBuffer = await file.arrayBuffer();
     const fileHash = await crypto.subtle.digest('SHA-256', arrayBuffer);
     const fileHashHex = Array.from(new Uint8Array(fileHash)).map(b => b.toString(16).padStart(2, '0')).join('');
     const hashKey = `hash:${fileHashHex}`;
