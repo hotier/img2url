@@ -24,8 +24,8 @@ jobs:
       - name: Fix file names
         run: |
           cd client
-          if [ -f "vite。config。js" ]; then
-            mv "vite。config。js" vite.config.js
+          if [ -f "vite.config.js" ]; then
+            mv "vite.config.js" vite.config.js
           fi
           ls -la
       
