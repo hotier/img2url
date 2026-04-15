@@ -10,13 +10,15 @@ directory = "./dist"
 [dev]
 port = 8787
 
+# R2 存储桶绑定
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "img2url-images"
+
 [env.production]
 NODE_ENV = "production"
 
 # 环境变量（在 Cloudflare Dashboard 中配置，不要提交到 Git）
-# R2 存储桶配置
-# R2_BUCKET_NAME = "img2url-images"
-
 # API 配置
 # CUSTOM_DOMAIN = "your-custom-domain.pages.dev"
 
