@@ -1,1 +1,0 @@
-{"name":"img2url-worker","version":"1.0.0","scripts":{"dev":"wrangler dev src/index.ts","deploy":"wrangler deploy"},"dependencies":{"@aws-sdk/client-s3":"^3.1000.0"},"devDependencies":{"@cloudflare/workers-types":"^4.20240529.0","typescript":"^5.4.5","wrangler":"^4.64.0"}}

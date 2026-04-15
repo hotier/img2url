@@ -20,7 +20,6 @@ jobs:
       
       - name: Fix file names
         run: |
-          cd client
           # 检查并修复可能的文件名问题
           if [ -f "vite。config。js" ]; then
             mv "vite。config。js" vite.config.js
@@ -31,8 +30,11 @@ jobs:
           fi
           ls -la
       
-      - name: Build client
-        run: npm run deploy:client
+      - name: Install dependencies
+        run: npm install
+      
+      - name: Build
+        run: npm run build
       
       - name: Deploy to Pages
         uses: cloudflare/pages-action@v1
@@ -40,5 +42,5 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           projectName: img2url
-          directory: client/dist
+          directory: dist
           branch: main
