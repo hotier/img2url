@@ -13,7 +13,7 @@ on:
       - 'vite.config.js'
       - 'wrangler.toml'
       - '.github/workflows/deploy.yml'
-  workflow_dispatch:  # 允许手动触发
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -44,9 +44,15 @@ jobs:
         run: npm run build
 
       - name: Prepare Functions directory
+        run: cp -r functions/. dist/functions/
+
+      - name: Set Cloudflare Pages secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          # 复制 functions 目录到 dist，确保 Pages Functions 可用
-          cp -r functions/. dist/functions/
+          echo "$CLOUDFLARE_API_TOKEN" | npx wrangler pages secret put CLOUDFLARE_API_TOKEN --project-name=img2url
+          echo "$CLOUDFLARE_ACCOUNT_ID" | npx wrangler pages secret put CLOUDFLARE_ACCOUNT_ID --project-name=img2url
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/pages-action@v1
