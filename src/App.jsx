@@ -121,6 +121,8 @@ function App() {
   const currentBatchTotalRef = useRef(0); // 当前批次的总文件数（固定不变）
   const statsDebounceRef = useRef(null); // 防抖定时器
   const pendingStatsCountRef = useRef(0); // 待刷新的上传成功计数
+  const retryCountRef = useRef(0); // 当前文件重试次数
+  const MAX_RETRIES = 5; // 最大重试次数
 
   useEffect(() => {
     const savedImages = localStorage.getItem('uploadedImages');
@@ -173,6 +175,7 @@ function App() {
     setUploading(true);
     const file = uploadQueue[0];
     const totalFiles = uploadQueue.length;
+    retryCountRef.current = 0; // 重置重试计数器
 
     // 检测新的上传批次：当前批次完成或原始队列长度不同
     const isNewBatch = uploadStatsRef.current.completedFiles >= currentBatchTotalRef.current ||
@@ -407,148 +410,176 @@ function App() {
     }
 
     setError('');
-    setUploading(true);
 
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      const formData = new FormData();
-      formData.append('file', file);
-      if (expiration > 0) {
-        formData.append('expiration', expiration.toString());
-      }
-      if (turnstileToken) {
-        formData.append('turnstile', turnstileToken);
-      }
-
-      // 上传进度 - 基于整体上传行为计算进度
-      xhr.upload.addEventListener('progress', (e) => {
-        if (e.lengthComputable) {
-          const fileUploadedSize = e.loaded; // 当前文件已上传的字节数
-          const fileTotalSize = e.total;     // 当前文件的总字节数
-
-          // 计算已完成文件的总大小（使用原始队列快照）
-          const completedFilesTotalSize = originalQueueRef.current.reduce((sum, f, i) => {
-            if (i < uploadStatsRef.current.completedFiles) {
-              return sum + f.size;
-            }
-            return sum;
-          }, 0);
-
-          // 更新整体已上传字节数：已完成文件的总大小 + 当前文件已上传的字节数
-          uploadStatsRef.current.uploadedSize = completedFilesTotalSize + fileUploadedSize;
-
-          // 计算整体上传行为进度：已上传总字节数 / 所有文件总字节数
-          // 使用 Math.min 限制最大值为 100，避免显示 101%
-          const overallProgress = Math.min(
-            100,
-            Math.round((uploadStatsRef.current.uploadedSize / uploadStatsRef.current.totalSize) * 100)
-          );
-
-          setUploadProgress(prev => ({
-            ...prev,
-            currentProgress: overallProgress,
-            currentFileName: file.name,
-            currentFileSize: file.size
-          }));
+    const attemptUpload = () => {
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        const formData = new FormData();
+        formData.append('file', file);
+        if (expiration > 0) {
+          formData.append('expiration', expiration.toString());
         }
-      });
+        if (turnstileToken) {
+          formData.append('turnstile', turnstileToken);
+        }
 
-      xhr.addEventListener('load', () => {
-        if (xhr.status === 200) {
-          try {
-            const result = JSON.parse(xhr.responseText);
+        // 上传进度 - 基于整体上传行为计算进度
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable) {
+            const fileUploadedSize = e.loaded; // 当前文件已上传的字节数
+            const fileTotalSize = e.total;     // 当前文件的总字节数
 
-            if (result.success) {
-              const imageInfo = {
-                url: result.data.url,
-                fileName: result.data.fileName,
-                originalName: result.data.originalName || file.name,
-                size: result.data.size,
-                type: result.data.type,
-                expiration: result.data.expiration,
-                expirationDays: result.data.expirationDays || null,
-                uploadedAt: result.data.uploadedAt,
-                duplicate: result.data.duplicate || false,
-                uploadCount: result.data.uploadCount || 1,
-              };
-              setUploadedImages([imageInfo, ...uploadedImages]);
-
-              // 如果是重复上传，不增加计数
-              if (!result.data.duplicate) {
-                const newUploadCount = uploadCount + 1;
-                setUploadCount(newUploadCount);
-
-                // 清除验证 token（防止重复使用）
-                setTurnstileToken('');
+            // 计算已完成文件的总大小（使用原始队列快照）
+            const completedFilesTotalSize = originalQueueRef.current.reduce((sum, f, i) => {
+              if (i < uploadStatsRef.current.completedFiles) {
+                return sum + f.size;
               }
+              return sum;
+            }, 0);
 
-              // 更新已完成文件数和已上传字节数
-              uploadStatsRef.current.completedFiles = uploadStatsRef.current.completedFiles + 1;
-              // 计算已完成文件的总大小（用于下一个文件的进度计算）
-              const completedFilesTotalSize = originalQueueRef.current.reduce((sum, f, i) => {
-                if (i < uploadStatsRef.current.completedFiles) {
-                  return sum + f.size;
-                }
-                return sum;
-              }, 0);
-              uploadStatsRef.current.uploadedSize = completedFilesTotalSize;
+            // 更新整体已上传字节数：已完成文件的总大小 + 当前文件已上传的字节数
+            uploadStatsRef.current.uploadedSize = completedFilesTotalSize + fileUploadedSize;
 
-              // 显示存储警告
-              if (result.data.storageWarning) {
-                const storagePercent = result.data.storageUsage || 0;
-                setError(`存储空间已使用 ${storagePercent.toFixed(1)}%，建议开始清理旧图片以避免影响使用。`);
-                setTimeout(() => setError(''), 10000); // 10秒后自动消失
-              }
+            // 计算整体上传行为进度：已上传总字节数 / 所有文件总字节数
+            // 使用 Math.min 限制最大值为 100，避免显示 101%
+            const overallProgress = Math.min(
+              100,
+              Math.round((uploadStatsRef.current.uploadedSize / uploadStatsRef.current.totalSize) * 100)
+            );
 
-              scheduleStatsRefresh();
-              resolve(result);
-            } else {
-              console.error('Upload failed:', result);
-              setError(result.message || '上传失败');
-
-              // 如果需要验证码，显示验证组件
-              if (result.error === 'CAPTCHA_REQUIRED') {
-                setCaptchaRequired(true);
-              }
-
-              // 如果验证码已使用，需要重新验证
-              if (result.error === 'CAPTCHA_USED') {
-                setTurnstileToken('');
-                setCaptchaRequired(true);
-                setError('验证码已使用，请重新验证');
-              }
-              reject(result);
-            }
-          } catch (err) {
-            console.error('Parse error:', err);
-            console.error('Response text:', xhr.responseText);
-            setError('服务器响应格式错误');
-            reject(err);
+            setUploadProgress(prev => ({
+              ...prev,
+              currentProgress: overallProgress,
+              currentFileName: file.name,
+              currentFileSize: file.size
+            }));
           }
-        } else {
-          console.error('Upload failed with status:', xhr.status);
-          console.error('Response text:', xhr.responseText);
-          setError(`上传失败 (${xhr.status}): ${xhr.statusText}`);
-          reject(new Error(`HTTP ${xhr.status}`));
+        });
+
+        xhr.addEventListener('load', () => {
+          if (xhr.status === 200) {
+            try {
+              const result = JSON.parse(xhr.responseText);
+
+              if (result.success) {
+                const imageInfo = {
+                  url: result.data.url,
+                  fileName: result.data.fileName,
+                  originalName: result.data.originalName || file.name,
+                  size: result.data.size,
+                  type: result.data.type,
+                  expiration: result.data.expiration,
+                  expirationDays: result.data.expirationDays || null,
+                  uploadedAt: result.data.uploadedAt,
+                  duplicate: result.data.duplicate || false,
+                  uploadCount: result.data.uploadCount || 1,
+                };
+                setUploadedImages([imageInfo, ...uploadedImages]);
+
+                // 如果是重复上传，不增加计数
+                if (!result.data.duplicate) {
+                  const newUploadCount = uploadCount + 1;
+                  setUploadCount(newUploadCount);
+
+                  // 清除验证 token（防止重复使用）
+                  setTurnstileToken('');
+                }
+
+                // 更新已完成文件数和已上传字节数
+                uploadStatsRef.current.completedFiles = uploadStatsRef.current.completedFiles + 1;
+                // 计算已完成文件的总大小（用于下一个文件的进度计算）
+                const completedFilesTotalSize = originalQueueRef.current.reduce((sum, f, i) => {
+                  if (i < uploadStatsRef.current.completedFiles) {
+                    return sum + f.size;
+                  }
+                  return sum;
+                }, 0);
+                uploadStatsRef.current.uploadedSize = completedFilesTotalSize;
+
+                // 显示存储警告
+                if (result.data.storageWarning) {
+                  const storagePercent = result.data.storageUsage || 0;
+                  setError(`存储空间已使用 ${storagePercent.toFixed(1)}%，建议开始清理旧图片以避免影响使用。`);
+                  setTimeout(() => setError(''), 10000); // 10秒后自动消失
+                }
+
+                scheduleStatsRefresh();
+                resolve(result);
+              } else {
+                console.error('Upload failed:', result);
+                
+                // 如果需要验证码，显示验证组件（不重试）
+                if (result.error === 'CAPTCHA_REQUIRED') {
+                  setCaptchaRequired(true);
+                  setError(result.message || '上传失败');
+                  reject(result);
+                  return;
+                }
+
+                // 如果验证码已使用，需要重新验证（不重试）
+                if (result.error === 'CAPTCHA_USED') {
+                  setTurnstileToken('');
+                  setCaptchaRequired(true);
+                  setError('验证码已使用，请重新验证');
+                  reject(result);
+                  return;
+                }
+
+                // 其他错误，尝试重试
+                reject(new Error(result.message || '上传失败'));
+              }
+            } catch (err) {
+              console.error('Parse error:', err);
+              console.error('Response text:', xhr.responseText);
+              reject(new Error('服务器响应格式错误'));
+            }
+          } else {
+            console.error('Upload failed with status:', xhr.status);
+            console.error('Response text:', xhr.responseText);
+            reject(new Error(`HTTP ${xhr.status}`));
+          }
+        });
+
+        xhr.addEventListener('error', () => {
+          console.error('Upload network error');
+          reject(new Error('Network error'));
+        });
+
+        xhr.addEventListener('abort', () => {
+          reject(new Error('Upload aborted'));
+        });
+
+        xhr.open('POST', '/upload');
+        xhr.send(formData);
+      });
+    };
+
+    // 重试逻辑
+    let lastError = null;
+    while (retryCountRef.current < MAX_RETRIES) {
+      try {
+        setUploading(true);
+        const result = await attemptUpload();
+        setUploading(false);
+        return result;
+      } catch (err) {
+        lastError = err;
+        retryCountRef.current++;
+        
+        if (retryCountRef.current < MAX_RETRIES) {
+          console.log(`上传失败，第 ${retryCountRef.current} 次重试...`);
+          setError(`上传失败，正在重试 (${retryCountRef.current}/${MAX_RETRIES})...`);
+          // 等待 1 秒后重试
+          await new Promise(resolve => setTimeout(resolve, 1000));
         }
-        setUploading(false);
-      });
+      }
+    }
 
-      xhr.addEventListener('error', () => {
-        console.error('Upload error');
-        setError('网络错误，请检查您的网络连接');
-        setUploading(false);
-        reject(new Error('Network error'));
-      });
-
-      xhr.addEventListener('abort', () => {
-        setUploading(false);
-        reject(new Error('Upload aborted'));
-      });
-
-      xhr.open('POST', '/upload');
-      xhr.send(formData);
-    });
+    // 达到最大重试次数
+    setUploading(false);
+    console.error(`上传失败，已达到最大重试次数 (${MAX_RETRIES})`);
+    setError(`上传失败，已重试 ${MAX_RETRIES} 次: ${lastError?.message || '未知错误'}`);
+    throw lastError;
   };
 
   // 辅助函数：使用指定的验证token上传文件
