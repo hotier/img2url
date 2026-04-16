@@ -13,7 +13,7 @@ function formatTimestamp() {
   const hours = String(shanghaiTime.getHours()).padStart(2, '0');
   const minutes = String(shanghaiTime.getMinutes()).padStart(2, '0');
   const seconds = String(shanghaiTime.getSeconds()).padStart(2, '0');
-  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds} (UTC+8)`;
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}(CST)`;
 }
 
 function errorResponse(status, code, message) {

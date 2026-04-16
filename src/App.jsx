@@ -305,12 +305,31 @@ function App() {
   };
 
   const fetchStats = async (force = false) => {
+    const STATS_CACHE_KEY = 'statsCache';
+    const CACHE_TTL = 5 * 60 * 1000;
+
+    if (!force) {
+      const cachedStats = localStorage.getItem(STATS_CACHE_KEY);
+      if (cachedStats) {
+        try {
+          const parsed = JSON.parse(cachedStats);
+          if (parsed.timestamp && Date.now() - parsed.timestamp < CACHE_TTL) {
+            setStats(parsed.data);
+          } else {
+            setStats(parsed.data);
+          }
+        } catch (e) {
+          console.warn('Failed to parse cached stats:', e);
+        }
+      }
+    }
+
     try {
       const response = await fetch('/stats');
       if (response.ok) {
         const result = await response.json();
         if (result.success) {
-          setStats({
+          const statsData = {
             images: result.data.totalImages || 0,
             totalSize: result.data.totalSize || 0,
             totalSizeFormatted: result.data.totalSizeHuman || '0 Bytes',
@@ -324,8 +343,14 @@ function App() {
               storage: result.data.storageLimitHuman || "10 GB",
               read: 1000000
             },
-            warnings: []
-          });
+            warnings: [],
+            timestamp: result.data.timestamp
+          };
+          setStats(statsData);
+          localStorage.setItem(STATS_CACHE_KEY, JSON.stringify({
+            data: statsData,
+            timestamp: Date.now()
+          }));
         }
       }
     } catch (err) {
@@ -344,7 +369,7 @@ function App() {
       const count = pendingStatsCountRef.current;
       pendingStatsCountRef.current = 0;
       if (count > 0) {
-        fetchStats();
+        fetchStats(true);
       }
     }, 5000);
   };
