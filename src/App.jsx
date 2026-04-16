@@ -920,12 +920,14 @@ function App() {
                   </button>
                   <img src={img.url} alt="" className="history-thumb" />
                   <div className="history-info">
-                    <div className="history-top-row">
+                    <div className="history-row">
                       <span className="history-name">{img.originalName}</span>
-                      <span className="history-size">{formatSize(img.size)}</span>
-                      <span className="meta-badge">{getExpirationText(img.expirationDays)}</span>
-                      {img.duplicate && <span className="meta-badge duplicate-badge">重复</span>}
-                      {img.uploadCount > 1 && <span className="meta-badge count-badge">{img.uploadCount}次</span>}
+                      <div className="history-meta-right">
+                        <span className="meta-badge meta-size">{formatSize(img.size)}</span>
+                        <span className="meta-badge">{getExpirationText(img.expirationDays)}</span>
+                        {img.duplicate && <span className="meta-badge duplicate-badge">重复</span>}
+                        {img.uploadCount > 1 && <span className="meta-badge count-badge">{img.uploadCount}次</span>}
+                      </div>
                     </div>
                     <div className="history-url">
                       <input type="text" value={img.url} readOnly />

@@ -1084,10 +1084,9 @@ input:checked + .toggle::after {
 
 /* 历史记录 */
 .history-section {
-  margin: 0 28px 24px;
-  flex: 1;
+  margin: 0 28px 20px;
+  flex-shrink: 0;
   min-height: 0;
-  max-height: 400px;
   display: flex;
   flex-direction: column;
 }
@@ -1110,8 +1109,8 @@ input:checked + .toggle::after {
 }
 
 .history-count {
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-  color: white;
+  background: white;
+  color: #64748b;
   padding: 2px 10px;
   border-radius: 20px;
   font-size: 12px;
@@ -1144,37 +1143,38 @@ input:checked + .toggle::after {
   padding-right: 4px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
+  max-height: 200px;
 }
 
 .history-item {
   display: flex;
   flex-direction: row;
-  align-items: stretch;
-  padding: 12px;
+  align-items: center;
+  padding: 10px 12px;
   background: white;
   border: 1px solid #f1f5f9;
-  border-radius: 16px;
+  border-radius: 12px;
   transition: all 0.2s ease;
   position: relative;
   overflow: hidden;
+  min-height: 56px;
+  max-height: 56px;
+  flex-shrink: 0;
 }
 
 .history-item:hover {
-  border-color: #e2e8f0;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
-  transform: translateY(-2px);
+  border-color: #cbd5e1;
 }
 
 .history-item.duplicate {
   border-color: #fcd34d;
-  background: linear-gradient(135deg, #fffbeb 0%, white 100%);
 }
 
 .history-thumb {
-  width: 80px;
-  height: 80px;
-  border-radius: 10px;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
   object-fit: cover;
   background: #f8fafc;
   flex-shrink: 0;
@@ -1185,15 +1185,15 @@ input:checked + .toggle::after {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  padding-left: 12px;
+  padding-left: 10px;
+  gap: 4px;
 }
 
-.history-top-row {
+.history-row {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .history-name {
@@ -1203,7 +1203,15 @@ input:checked + .toggle::after {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 150px;
+  flex: 1;
+  min-width: 0;
+}
+
+.history-meta-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 .history-size {
@@ -1232,6 +1240,11 @@ input:checked + .toggle::after {
   font-weight: 600;
 }
 
+.meta-size {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
 .duplicate-badge {
   background: #fef3c7;
   color: #d97706;
@@ -1250,11 +1263,11 @@ input:checked + .toggle::after {
 
 .history-url input {
   flex: 1;
-  height: 28px;
-  padding: 0 10px;
+  height: 24px;
+  padding: 0 8px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border-radius: 6px;
   font-size: 11px;
   color: #475569;
   font-family: 'JetBrains Mono', monospace;
@@ -1268,14 +1281,14 @@ input:checked + .toggle::after {
 
 .history-actions-group button,
 .history-actions-group a {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: white;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border-radius: 6px;
   color: #64748b;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -1283,7 +1296,7 @@ input:checked + .toggle::after {
 }
 
 .history-actions-group i {
-  font-size: 12px;
+  font-size: 11px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1291,24 +1304,24 @@ input:checked + .toggle::after {
 
 .history-actions-group button:hover,
 .history-actions-group a:hover {
-  background: #6366f1;
-  color: white;
+  background: white;
+  color: #6366f1;
   border-color: #6366f1;
 }
 
 .history-delete {
   position: absolute;
-  top: 8px;
+  top: 50%;
   right: 8px;
-  padding: 6px;
-  background: rgba(255, 255, 255, 0.9);
+  transform: translateY(-50%);
+  padding: 4px;
+  background: white;
   border: none;
   color: #94a3b8;
   cursor: pointer;
   transition: all 0.2s ease;
   z-index: 10;
-  border-radius: 8px;
-  backdrop-filter: blur(4px);
+  border-radius: 6px;
 }
 
 .history-delete:hover {
@@ -1571,66 +1584,69 @@ input:checked + .toggle::after {
 
   .history-section {
     margin: 0 16px 16px;
-    max-height: 250px;
+    max-height: 200px;
+  }
+
+  .history-list {
+    max-height: 160px;
   }
 
   .history-item {
-    padding: 10px;
-    gap: 10px;
-    position: relative;
+    padding: 8px 10px;
+    min-height: 48px;
+    max-height: 48px;
   }
 
   .history-thumb {
-    width: 56px;
-    height: 56px;
-    border-radius: 8px;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
   }
 
   .history-info {
-    flex: 1;
-    min-width: 0;
+    padding-left: 8px;
+    gap: 2px;
   }
 
-  .history-top-row {
-    flex-wrap: wrap;
-    gap: 4px;
+  .history-row {
+    gap: 6px;
   }
 
   .history-name {
-    max-width: 120px;
     font-size: 12px;
   }
 
-  .history-url {
-    flex-direction: row;
-    gap: 4px;
+  .history-meta-right {
+    gap: 3px;
+  }
+
+  .meta-badge {
+    font-size: 9px;
+    padding: 1px 4px;
   }
 
   .history-url input {
-    height: 26px;
+    height: 20px;
     font-size: 10px;
-  }
-
-  .history-actions-group {
-    display: flex;
-    gap: 4px;
+    padding: 0 6px;
   }
 
   .history-actions-group button,
   .history-actions-group a {
-    width: 26px;
-    height: 26px;
+    width: 20px;
+    height: 20px;
   }
 
   .history-actions-group i {
-    font-size: 12px;
+    font-size: 10px;
   }
 
   .history-delete {
     position: absolute;
-    top: 6px;
-    right: 6px;
-    padding: 4px;
+    top: 50%;
+    right: 4px;
+    transform: translateY(-50%);
+    padding: 3px;
   }
 
   .status-bar {
@@ -1971,41 +1987,63 @@ input:checked + .toggle::after {
 
   .history-section {
     margin: 0 16px;
+    max-height: 180px;
+  }
+
+  .history-list {
+    max-height: 140px;
   }
 
   .history-thumb {
-    width: 48px;
-    height: 48px;
+    width: 28px;
+    height: 28px;
   }
 
   .history-item {
-    padding: 8px;
-    gap: 8px;
+    padding: 6px 8px;
+    min-height: 42px;
+    max-height: 42px;
   }
 
-  .history-top-row {
+  .history-row {
     gap: 4px;
   }
 
   .history-name {
-    max-width: 100px;
     font-size: 11px;
   }
 
-  .history-url {
-    flex-direction: row;
-    gap: 4px;
+  .history-meta-right {
+    gap: 2px;
+  }
+
+  .meta-badge {
+    font-size: 8px;
+    padding: 1px 3px;
   }
 
   .history-url input {
-    height: 24px;
-    font-size: 10px;
+    height: 18px;
+    font-size: 9px;
+    padding: 0 5px;
   }
 
   .history-actions-group button,
   .history-actions-group a {
-    width: 24px;
-    height: 24px;
+    width: 18px;
+    height: 18px;
+  }
+
+  .history-actions-group i {
+    font-size: 9px;
+  }
+
+  .history-delete {
+    position: absolute;
+    top: 50%;
+    right: 4px;
+    transform: translateY(-50%);
+    padding: 2px;
   }
 
   .status-bar {
