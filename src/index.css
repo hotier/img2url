@@ -124,7 +124,7 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 40px 20px;
+  padding: 20px;
   overflow: hidden;
 }
 
@@ -156,6 +156,10 @@ body {
   max-width: 900px;
   margin: 0 auto;
   padding: 20px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
 }
 
 .back-btn-wrapper {
@@ -166,7 +170,6 @@ body {
 
 .docs-brand {
   text-align: center;
-  margin-bottom: 30px;
 }
 
 .docs-brand h1 {
@@ -516,6 +519,8 @@ body {
 
 /* 返回按钮 */
 .back-btn {
+  position: absolute;
+  right: 0;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -563,10 +568,11 @@ body {
 /* 上传页面样式 */
 .card-header {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+  justify-content: center;
+  align-items: center;
   padding: 24px 28px 16px;
   flex-shrink: 0;
+  position: relative;
 }
 
 .brand-section h1 {
@@ -593,6 +599,10 @@ body {
 .header-actions {
   display: flex;
   gap: 10px;
+  position: absolute;
+  right: 28px;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 .btn-secondary {
@@ -916,11 +926,11 @@ body {
 
 /* 控制栏 */
 .control-bar {
-  margin: 0 28px 24px;
+  margin: 0 28px 20px;
   flex-shrink: 0;
-  padding: 12px 20px;
+  padding: 8px 16px;
   background: #f8fafc;
-  border-radius: 16px;
+  border-radius: 12px;
   border: 1px solid #f1f5f9;
 }
 
@@ -1043,12 +1053,12 @@ input:checked + .toggle::after {
 }
 
 .day-btn {
-  height: 34px; /* 固定高度，与 toggle 保持视觉平衡 */
-  padding: 0 16px;
+  height: 28px;
+  padding: 0 10px;
   border: 1px solid #e2e8f0;
   background: white;
-  border-radius: 10px;
-  font-size: 13px;
+  border-radius: 8px;
+  font-size: 12px;
   color: #64748b;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -1077,7 +1087,7 @@ input:checked + .toggle::after {
   margin: 0 28px 24px;
   flex: 1;
   min-height: 0;
-  max-height: 300px; /* 限制最大高度，确保可以滚动 */
+  max-height: 400px;
   display: flex;
   flex-direction: column;
 }
@@ -1086,7 +1096,7 @@ input:checked + .toggle::after {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
 .section-header h4 {
@@ -1100,8 +1110,8 @@ input:checked + .toggle::after {
 }
 
 .history-count {
-  background: #f1f5f9;
-  color: #64748b;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  color: white;
   padding: 2px 10px;
   border-radius: 20px;
   font-size: 12px;
@@ -1109,89 +1119,127 @@ input:checked + .toggle::after {
 }
 
 .clear-btn {
-  padding: 4px 0;
-  background: none;
-  border: none;
+  padding: 6px 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
   color: #ef4444;
   font-size: 12px;
   cursor: pointer;
   display: flex;
   align-items: center;
+  gap: 4px;
   font-weight: 600;
   transition: all 0.2s ease;
+  border-radius: 8px;
 }
 
 .clear-btn:hover {
-  color: #dc2626;
-  opacity: 0.8;
+  background: #fee2e2;
+  border-color: #fca5a5;
 }
 
 /* 历史记录列表滚动 */
 .history-list {
   overflow-y: auto;
   padding-right: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .history-item {
   display: flex;
-  align-items: center;
-  gap: 16px;
+  flex-direction: row;
+  align-items: stretch;
   padding: 12px;
   background: white;
   border: 1px solid #f1f5f9;
   border-radius: 16px;
-  margin-bottom: 12px;
   transition: all 0.2s ease;
   position: relative;
+  overflow: hidden;
 }
 
 .history-item:hover {
   border-color: #e2e8f0;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+  transform: translateY(-2px);
+}
+
+.history-item.duplicate {
+  border-color: #fcd34d;
+  background: linear-gradient(135deg, #fffbeb 0%, white 100%);
 }
 
 .history-thumb {
-  width: 56px;
-  height: 56px;
-  border-radius: 12px;
+  width: 80px;
+  height: 80px;
+  border-radius: 10px;
   object-fit: cover;
   background: #f8fafc;
+  flex-shrink: 0;
 }
 
 .history-info {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding-left: 12px;
+}
+
+.history-top-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .history-name {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: #1e293b;
-  margin-bottom: 4px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 150px;
+}
+
+.history-size {
+  font-size: 11px;
+  color: #94a3b8;
 }
 
 .history-meta {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .history-meta span {
-  font-size: 12px;
+  font-size: 11px;
   color: #94a3b8;
 }
 
 .meta-badge {
-  padding: 2px 8px;
+  padding: 2px 6px;
   background: #f1f5f9;
   color: #64748b;
-  border-radius: 6px;
-  font-size: 11px;
+  border-radius: 4px;
+  font-size: 10px;
   font-weight: 600;
+}
+
+.duplicate-badge {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.count-badge {
+  background: #dbeafe;
+  color: #2563eb;
 }
 
 .history-url {
@@ -1202,12 +1250,12 @@ input:checked + .toggle::after {
 
 .history-url input {
   flex: 1;
-  height: 36px; /* 稍微增加高度以适应更大的字号 */
-  padding: 0 12px;
+  height: 28px;
+  padding: 0 10px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
-  font-size: 14px; /* 从 12px 加大到 14px */
+  font-size: 11px;
   color: #475569;
   font-family: 'JetBrains Mono', monospace;
   min-width: 0;
@@ -1215,13 +1263,13 @@ input:checked + .toggle::after {
 
 .history-actions-group {
   display: flex;
-  gap: 6px;
+  gap: 4px;
 }
 
 .history-actions-group button,
 .history-actions-group a {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1235,7 +1283,7 @@ input:checked + .toggle::after {
 }
 
 .history-actions-group i {
-  font-size: 14px; /* 统一图标大小 */
+  font-size: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1243,26 +1291,29 @@ input:checked + .toggle::after {
 
 .history-actions-group button:hover,
 .history-actions-group a:hover {
-  background: #f8fafc;
-  color: #3b82f6;
-  border-color: #3b82f6;
+  background: #6366f1;
+  color: white;
+  border-color: #6366f1;
 }
 
 .history-delete {
   position: absolute;
   top: 8px;
   right: 8px;
-  padding: 8px;
-  background: none;
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.9);
   border: none;
   color: #94a3b8;
   cursor: pointer;
   transition: all 0.2s ease;
   z-index: 10;
+  border-radius: 8px;
+  backdrop-filter: blur(4px);
 }
 
 .history-delete:hover {
   color: #ef4444;
+  background: white;
 }
 
 /* 底部状态栏 */
@@ -1520,66 +1571,65 @@ input:checked + .toggle::after {
 
   .history-section {
     margin: 0 16px 16px;
-    max-height: 250px; /* 移动端限制历史记录高度 */
+    max-height: 250px;
   }
 
   .history-item {
-    padding: 12px;
-    gap: 12px;
+    padding: 10px;
+    gap: 10px;
     position: relative;
   }
 
   .history-thumb {
-    width: 48px;
-    height: 48px;
+    width: 56px;
+    height: 56px;
     border-radius: 8px;
   }
 
   .history-info {
-    width: 100%;
+    flex: 1;
+    min-width: 0;
   }
 
-  .history-meta {
-    gap: 6px;
-    margin-bottom: 8px;
+  .history-top-row {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .history-name {
+    max-width: 120px;
+    font-size: 12px;
   }
 
   .history-url {
-    flex-direction: column;
-    gap: 6px;
+    flex-direction: row;
+    gap: 4px;
   }
 
   .history-url input {
-    width: 100%;
-    height: 30px;
+    height: 26px;
+    font-size: 10px;
   }
 
   .history-actions-group {
     display: flex;
-    gap: 6px;
-    width: 100%;
+    gap: 4px;
   }
 
   .history-actions-group button,
   .history-actions-group a {
-    flex: 1;
-    height: 34px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    margin: 0;
-    box-sizing: border-box;
+    width: 26px;
+    height: 26px;
   }
 
   .history-actions-group i {
-    font-size: 16px; /* 移动端稍微调大一点图标，方便点击 */
+    font-size: 12px;
   }
 
   .history-delete {
     position: absolute;
-    top: 8px;
-    right: 8px;
+    top: 6px;
+    right: 6px;
     padding: 4px;
   }
 
@@ -1924,26 +1974,38 @@ input:checked + .toggle::after {
   }
 
   .history-thumb {
-    width: 36px;
-    height: 36px;
+    width: 48px;
+    height: 48px;
   }
 
   .history-item {
-    padding: 10px;
+    padding: 8px;
+    gap: 8px;
+  }
+
+  .history-top-row {
+    gap: 4px;
+  }
+
+  .history-name {
+    max-width: 100px;
+    font-size: 11px;
   }
 
   .history-url {
-    flex-direction: column;
+    flex-direction: row;
+    gap: 4px;
   }
 
   .history-url input {
-    width: 100%;
+    height: 24px;
+    font-size: 10px;
   }
 
-  .history-url button,
-  .history-url a {
-    width: 100%;
-    justify-content: center;
+  .history-actions-group button,
+  .history-actions-group a {
+    width: 24px;
+    height: 24px;
   }
 
   .status-bar {

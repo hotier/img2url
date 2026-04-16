@@ -745,7 +745,6 @@ function App() {
               <i className="bi bi-cloud-upload"></i>
               Img2URL
             </h1>
-            <p>免费图片托管 · 基于 Cloudflare R2</p>
           </div>
           <div className="header-actions">
             <Link to="/api" className="btn-secondary">
@@ -921,9 +920,9 @@ function App() {
                   </button>
                   <img src={img.url} alt="" className="history-thumb" />
                   <div className="history-info">
-                    <div className="history-name">{img.originalName}</div>
-                    <div className="history-meta">
-                      <span>{formatSize(img.size)}</span>
+                    <div className="history-top-row">
+                      <span className="history-name">{img.originalName}</span>
+                      <span className="history-size">{formatSize(img.size)}</span>
                       <span className="meta-badge">{getExpirationText(img.expirationDays)}</span>
                       {img.duplicate && <span className="meta-badge duplicate-badge">重复</span>}
                       {img.uploadCount > 1 && <span className="meta-badge count-badge">{img.uploadCount}次</span>}

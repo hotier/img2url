@@ -181,18 +181,15 @@ function ApiDocs() {
   return (
     <div className="docs-page">
       <div className="docs-header">
-        <div className="back-btn-wrapper">
-          <Link to="/" className="back-btn">
-            <i className="bi bi-house-door"></i>
-            返回首页
-          </Link>
-        </div>
+        <Link to="/" className="back-btn">
+          <i className="bi bi-house-door"></i>
+          返回首页
+        </Link>
         <div className="docs-brand">
           <h1>
             <i className="bi bi-code-slash"></i>
             API 文档
           </h1>
-          <p>{apiData.description}</p>
         </div>
       </div>
 
