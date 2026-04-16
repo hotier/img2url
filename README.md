@@ -94,13 +94,14 @@ curl -X POST https://your-domain.com/upload \
 ```json
 {
   "success": true,
+  "code": 200,
   "data": {
     "url": "https://your-domain.com/file/abc123",
     "fileName": "abc123",
     "originalName": "image.jpg",
     "size": 102400,
     "type": "image/jpeg",
-    "uploadedAt": "2026-04-16 15:30:00(CST)"
+    "time": "2026-04-16 15:30:00"
   }
 }
 ```
@@ -115,12 +116,13 @@ curl https://your-domain.com/stats
 ```json
 {
   "success": true,
+  "code": 200,
   "data": {
     "totalImages": 100,
     "totalSize": 314572800,
     "totalSizeHuman": "300 MB",
     "usagePercent": 2.93,
-    "timestamp": "2026-04-16 15:30:00(CST)"
+    "timestamp": "2026-04-16 15:30:00"
   }
 }
 ```
