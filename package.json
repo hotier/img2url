@@ -4,10 +4,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && mkdir -p dist/functions && cp -r functions/* dist/functions/",
+    "build": "vite build",
+    "postbuild": "node scripts/copy-functions.js",
     "preview": "vite preview",
     "deploy": "npm run build && wrangler pages deploy dist",
-    "dev:worker": "wrangler dev"
+    "dev:worker": "wrangler dev",
+    "dev:remote": "wrangler dev --remote"
   },
   "dependencies": {
     "highlight.js": "^11.11.1",

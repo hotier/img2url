@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import Turnstile from './Turnstile';
+import { TURNSTILE_SITE_KEY } from './config';
 
 // 数字动画组件
 function AnimatedNumber({ value, suffix = '' }) {
@@ -118,6 +119,8 @@ function App() {
   const originalQueueRef = useRef([]); // 存储原始队列快照
   const uploadSessionIdRef = useRef(0); // 上传会话ID，用于检测新的上传会话
   const currentBatchTotalRef = useRef(0); // 当前批次的总文件数（固定不变）
+  const statsDebounceRef = useRef(null); // 防抖定时器
+  const pendingStatsCountRef = useRef(0); // 待刷新的上传成功计数
 
   useEffect(() => {
     const savedImages = localStorage.getItem('uploadedImages');
@@ -308,12 +311,14 @@ function App() {
             images: result.data.totalImages || 0,
             totalSize: result.data.totalSize || 0,
             totalSizeFormatted: result.data.totalSizeHuman || '0 Bytes',
-            storageUsage: 0,
+            storageUsage: result.data.usagePercent || 0,
+            storageLimit: result.data.storageLimit || 0,
+            storageLimitFormatted: result.data.storageLimitHuman || '10 GB',
             readCount: 0,
             readLimit: 0,
             readUsage: 0,
             limits: {
-              storage: "10.00 GB",
+              storage: result.data.storageLimitHuman || "10 GB",
               read: 1000000
             },
             warnings: []
@@ -323,6 +328,22 @@ function App() {
     } catch (err) {
       console.error('Failed to fetch stats:', err);
     }
+  };
+
+  const scheduleStatsRefresh = () => {
+    pendingStatsCountRef.current += 1;
+    
+    if (statsDebounceRef.current) {
+      clearTimeout(statsDebounceRef.current);
+    }
+    
+    statsDebounceRef.current = setTimeout(() => {
+      const count = pendingStatsCountRef.current;
+      pendingStatsCountRef.current = 0;
+      if (count > 0) {
+        fetchStats();
+      }
+    }, 5000);
   };
 
   useEffect(() => {
@@ -441,13 +462,12 @@ function App() {
               const imageInfo = {
                 url: result.data.url,
                 fileName: result.data.fileName,
-                originalName: file.name,
+                originalName: result.data.originalName || file.name,
                 size: result.data.size,
                 type: result.data.type,
                 expiration: result.data.expiration,
                 expirationDays: result.data.expirationDays || null,
-                timestamp: result.data.timestamp,
-                uploadTime: new Date().toISOString(),
+                uploadedAt: result.data.uploadedAt,
                 duplicate: result.data.duplicate || false,
                 uploadCount: result.data.uploadCount || 1,
               };
@@ -480,7 +500,7 @@ function App() {
                 setTimeout(() => setError(''), 10000); // 10秒后自动消失
               }
 
-              fetchStats();
+              scheduleStatsRefresh();
               resolve(result);
             } else {
               console.error('Upload failed:', result);
@@ -568,13 +588,12 @@ function App() {
               const imageInfo = {
                 url: result.data.url,
                 fileName: result.data.fileName,
-                originalName: file.name,
+                originalName: result.data.originalName || file.name,
                 size: result.data.size,
                 type: result.data.type,
                 expiration: result.data.expiration,
                 expirationDays: result.data.expirationDays || null,
-                timestamp: result.data.timestamp,
-                uploadTime: new Date().toISOString(),
+                uploadedAt: result.data.uploadedAt,
                 duplicate: result.data.duplicate || false,
                 uploadCount: result.data.uploadCount || 1,
               };
@@ -589,7 +608,7 @@ function App() {
                 setTurnstileToken('');
               }
 
-              fetchStats();
+              scheduleStatsRefresh();
               resolve(result);
             } else {
               setError(result.message || '上传失败');
@@ -764,7 +783,7 @@ function App() {
                 <p>为了防止滥用，请完成以下验证：</p>
                 <div className="captcha-wrapper">
                   <Turnstile
-                    siteKey="0x4AAAAAACasWM4vLebpu_B7"
+                    siteKey={TURNSTILE_SITE_KEY}
                     onSuccess={handleCaptchaSuccess}
                     onError={handleCaptchaError}
                     onExpire={handleCaptchaExpire}

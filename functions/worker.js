@@ -1,11 +1,7 @@
 const CONSTANTS = {
-  MAX_IMAGE_SIZE: 5 * 1024 * 1024, // 5MB
-  MAX_IMAGE_WIDTH: 3840, // 4K
-  MAX_IMAGE_HEIGHT: 2160, // 4K
-  MAX_AGE: 60 * 60 * 24 * 30, // 30天
-  RATE_LIMIT: 100, // 每IP每分钟请求数
-  STORAGE_NOTIFY_THRESHOLD: 0.70, // 70%
-  READ_NOTIFY_THRESHOLD: 0.70, // 70%
+  MAX_IMAGE_SIZE: 5 * 1024 * 1024,
+  MAX_AGE: 60 * 60 * 24 * 30,
+  SHORT_ID_LENGTH: 7,
 };
 
 function formatTimestamp() {
@@ -28,8 +24,8 @@ function errorResponse(status, code, message) {
     headers: {
       'Content-Type': 'application/json',
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key',
     },
   });
 }
@@ -43,8 +39,8 @@ function successResponse(data, status = 200) {
     headers: {
       'Content-Type': 'application/json',
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key',
     },
   });
 }
@@ -54,10 +50,104 @@ function corsResponse() {
     status: 204,
     headers: {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key',
     },
   });
+}
+
+function verifyReferer(request, env) {
+  const referer = request.headers.get('Referer');
+  const origin = request.headers.get('Origin');
+  
+  const customDomain = env.CUSTOM_DOMAIN;
+  const requestOrigin = new URL(request.url).origin;
+  
+  const allowedOrigins = [requestOrigin];
+  if (customDomain) {
+    try {
+      const customUrl = new URL(customDomain);
+      allowedOrigins.push(customUrl.origin);
+    } catch (e) {
+      console.warn('Invalid CUSTOM_DOMAIN:', customDomain);
+    }
+  }
+  
+  if (origin) {
+    return allowedOrigins.includes(origin);
+  }
+  
+  if (referer) {
+    try {
+      const refererUrl = new URL(referer);
+      return allowedOrigins.includes(refererUrl.origin);
+    } catch (e) {
+      return false;
+    }
+  }
+  
+  return false;
+}
+
+async function verifyTurnstile(token, env) {
+  if (!token) {
+    return { valid: false, error: 'No token provided' };
+  }
+  
+  const secretKey = env.TURNSTILE_SECRET_KEY;
+  if (!secretKey) {
+    console.warn('TURNSTILE_SECRET_KEY not configured, skipping verification');
+    return { valid: true };
+  }
+  
+  try {
+    const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: `secret=${encodeURIComponent(secretKey)}&response=${encodeURIComponent(token)}`,
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      return { valid: true };
+    } else {
+      console.error('Turnstile verification failed:', result['error-codes']);
+      return { valid: false, error: result['error-codes'] };
+    }
+  } catch (error) {
+    console.error('Turnstile verification error:', error);
+    return { valid: false, error: error.message };
+  }
+}
+
+function generateShortId(length = CONSTANTS.SHORT_ID_LENGTH) {
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let result = '';
+  const randomValues = new Uint8Array(length);
+  crypto.getRandomValues(randomValues);
+  for (let i = 0; i < length; i++) {
+    result += chars[randomValues[i] % chars.length];
+  }
+  return result;
+}
+
+async function generateUniqueShortId(env) {
+  let attempts = 0;
+  const maxAttempts = 10;
+  
+  while (attempts < maxAttempts) {
+    const shortId = generateShortId();
+    const existing = await env.IMAGES.get(shortId);
+    if (!existing) {
+      return shortId;
+    }
+    attempts++;
+  }
+  
+  return generateShortId(CONSTANTS.SHORT_ID_LENGTH + 2);
 }
 
 async function handleUpload(request, env) {
@@ -74,6 +164,7 @@ async function handleUpload(request, env) {
     const formData = await request.formData();
     const file = formData.get('file');
     const expiration = parseInt(formData.get('expiration') || '0', 10);
+    const turnstileToken = formData.get('turnstile');
 
     if (!file || file.size === 0) {
       return errorResponse(400, 'NO_FILE_PROVIDED', 'No file provided');
@@ -92,62 +183,82 @@ async function handleUpload(request, env) {
       return errorResponse(400, 'INVALID_FILE_TYPE', 'File type not allowed. Only JPEG, PNG, GIF, WebP, and AVIF are supported.');
     }
 
-    const arrayBuffer = await file.arrayBuffer();
-
-    try {
-      const imageBitmap = await createImageBitmap(new Blob([arrayBuffer], { type: file.type }));
-      if (imageBitmap.width > CONSTANTS.MAX_IMAGE_WIDTH || imageBitmap.height > CONSTANTS.MAX_IMAGE_HEIGHT) {
-        imageBitmap.close();
-        return errorResponse(400, 'IMAGE_TOO_LARGE', `Image dimensions exceed ${CONSTANTS.MAX_IMAGE_WIDTH}x${CONSTANTS.MAX_IMAGE_HEIGHT} limit`);
+    if (turnstileToken) {
+      const turnstileResult = await verifyTurnstile(turnstileToken, env);
+      if (!turnstileResult.valid) {
+        return errorResponse(403, 'CAPTCHA_FAILED', 'Captcha verification failed');
       }
-      imageBitmap.close();
-    } catch (e) {
-      console.warn('Unable to validate image dimensions:', e);
     }
+
+    const arrayBuffer = await file.arrayBuffer();
 
     const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 
-    const fileExtension = file.name.split('.').pop() || 'jpg';
-    const fileName = `${hashHex}.${fileExtension}`;
-
-    const existingObject = await env.IMAGES.get(fileName);
-    if (existingObject) {
-      const existingUrl = `${env.CUSTOM_DOMAIN || 'https://api.hotier.cc.cd'}/i/${fileName}`;
+    const hashKey = `hash:${hashHex}`;
+    const existingMapping = await env.IMAGES.get(hashKey);
+    
+    if (existingMapping) {
+      const mappingText = await existingMapping.text();
+      const mapping = JSON.parse(mappingText);
+      const baseUrl = env.CUSTOM_DOMAIN || new URL(request.url).origin;
+      const existingUrl = `${baseUrl}/file/${mapping.shortId}`;
+      const uploadedAt = mapping.uploadedAt ? formatTimestamp(new Date(mapping.uploadedAt)) : formatTimestamp();
       return successResponse({
         url: existingUrl,
-        fileName: fileName,
-        size: file.size,
-        type: file.type,
+        fileName: mapping.shortId,
+        originalName: mapping.originalName,
+        size: mapping.size,
+        type: mapping.type,
         message: 'File already exists',
         expiration: 0,
         expirationDays: 0,
         duplicate: true,
-        uploadedAt: existingObject.customMetadata?.uploadedAt || null
+        uploadedAt: uploadedAt
       });
     }
 
+    const shortId = await generateUniqueShortId(env);
     const expiryDate = expiration > 0
       ? new Date(Date.now() + expiration * 24 * 60 * 60 * 1000)
       : null;
 
-    await env.IMAGES.put(fileName, arrayBuffer, {
-      httpMetadata: { contentType: file.type },
+    const originalExtension = file.name.split('.').pop() || 'jpg';
+    const originalName = file.name;
+
+    await env.IMAGES.put(shortId, arrayBuffer, {
+      httpMetadata: { contentType: 'image/webp' },
       customMetadata: {
         uploadedAt: new Date().toISOString(),
         expiration: expiryDate ? expiryDate.toISOString() : '0',
-        originalName: file.name
+        originalName: originalName,
+        originalType: file.type,
+        hash: hashHex
       }
     });
 
-    const imageUrl = `${env.CUSTOM_DOMAIN || 'https://api.hotier.cc.cd'}/i/${fileName}`;
+    await env.IMAGES.put(hashKey, JSON.stringify({
+      shortId: shortId,
+      originalName: originalName,
+      size: file.size,
+      type: file.type,
+      uploadedAt: new Date().toISOString()
+    }), {
+      customMetadata: {
+        type: 'hash-mapping'
+      }
+    });
+
+    const baseUrl = env.CUSTOM_DOMAIN || new URL(request.url).origin;
+    const imageUrl = `${baseUrl}/file/${shortId}`;
 
     const expirationDays = expiration > 0 ? expiration : null;
 
     return successResponse({
       url: imageUrl,
-      fileName: fileName,
+      fileName: shortId,
+      originalName: originalName,
       size: file.size,
       type: file.type,
       uploadedAt: formatTimestamp(),
@@ -174,7 +285,7 @@ async function handleImage(request, env, imageName) {
     }
 
     const headers = new Headers();
-    object.writeHttpMetadata(headers);
+    headers.set('Content-Type', 'image/webp');
     headers.set('Cache-Control', `public, max-age=${CONSTANTS.MAX_AGE}`);
     headers.set('Access-Control-Allow-Origin', '*');
 
@@ -190,10 +301,19 @@ async function handleDelete(request, env, imageName) {
     return errorResponse(405, 'METHOD_NOT_ALLOWED', 'Only DELETE requests are allowed');
   }
 
+  if (!verifyReferer(request, env)) {
+    return errorResponse(403, 'FORBIDDEN', 'Access denied: request must originate from this website');
+  }
+
   try {
     const object = await env.IMAGES.get(imageName);
     if (!object) {
       return errorResponse(404, 'IMAGE_NOT_FOUND', 'Image not found');
+    }
+
+    const hash = object.customMetadata?.hash;
+    if (hash) {
+      await env.IMAGES.delete(`hash:${hash}`);
     }
 
     await env.IMAGES.delete(imageName);
@@ -205,27 +325,45 @@ async function handleDelete(request, env, imageName) {
   }
 }
 
-async function handleCleanup(env) {
+async function handleCleanup(request, env) {
+  if (request.method !== 'POST') {
+    return errorResponse(405, 'METHOD_NOT_ALLOWED', 'Only POST requests are allowed');
+  }
+
+  if (!verifyReferer(request, env)) {
+    return errorResponse(403, 'FORBIDDEN', 'Access denied: request must originate from this website');
+  }
+
   try {
-    let cursor = null;
+    let cursor;
     let deletedCount = 0;
 
     do {
-      const objects = await env.IMAGES.list({ cursor, limit: 1000 });
+      const options = { limit: 1000 };
+      if (cursor) {
+        options.cursor = cursor;
+      }
+      const objects = await env.IMAGES.list(options);
 
       for (const object of objects.objects) {
+        if (object.key.startsWith('hash:')) {
+          continue;
+        }
+        
         const now = Date.now();
         const expiration = object.customMetadata?.expiration;
         
-        // 只有设置了过期时间且过期时间不为 '0' 的图片才检查是否过期
         if (!expiration || expiration === '0') {
-          // 永久图片，跳过
           continue;
         }
         
         const expiry = new Date(expiration).getTime();
         
         if (expiry <= now) {
+          const hash = object.customMetadata?.hash;
+          if (hash) {
+            await env.IMAGES.delete(`hash:${hash}`);
+          }
           await env.IMAGES.delete(object.key);
           deletedCount++;
         }
@@ -247,32 +385,101 @@ async function handleStats(request, env) {
   }
 
   try {
+    const accountId = env.CLOUDFLARE_ACCOUNT_ID || '';
+    const apiToken = env.CLOUDFLARE_API_TOKEN || '';
+
+    if (!accountId || !apiToken) {
+      return errorResponse(400, 'MISSING_CONFIG', 'CLOUDFLARE_ACCOUNT_ID or CLOUDFLARE_API_TOKEN not configured');
+    }
+
+    const headers = {
+      'Authorization': `Bearer ${apiToken}`,
+      'Content-Type': 'application/json',
+    };
+
+    const bucketsUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/r2/buckets`;
+    let bucketsResponse;
+    try {
+      bucketsResponse = await fetch(bucketsUrl, { headers });
+    } catch (fetchError) {
+      throw new Error(`Network error fetching buckets: ${fetchError.message}`);
+    }
+
+    if (!bucketsResponse.ok) {
+      const errorText = await bucketsResponse.text();
+      throw new Error(`Failed to list buckets: ${bucketsResponse.status} ${errorText}`);
+    }
+
+    const bucketsData = await bucketsResponse.json();
+    if (!bucketsData.success) {
+      throw new Error(`API error: ${bucketsData.errors?.[0]?.message || 'Unknown error'}`);
+    }
+
+    const buckets = bucketsData.result?.buckets || [];
+    const bucketStats = [];
     let totalSize = 0;
-    let count = 0;
+    let totalCount = 0;
 
-    let cursor = null;
-    do {
-      const objects = await env.IMAGES.list({ cursor, limit: 1000 });
-
-      for (const object of objects.objects) {
-        totalSize += object.size || 0;
-        count++;
+    for (const bucket of buckets) {
+      const bucketName = bucket.name;
+      
+      const usageUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/r2/buckets/${bucketName}/usage`;
+      let usageResponse;
+      try {
+        usageResponse = await fetch(usageUrl, { headers });
+      } catch (fetchError) {
+        console.warn(`Network error fetching usage for ${bucketName}: ${fetchError.message}`);
+        bucketStats.push({
+          name: bucketName,
+          count: 0,
+          size: 0,
+          sizeHuman: formatFileSize(0),
+          error: fetchError.message,
+        });
+        continue;
+      }
+      
+      let bucketSize = 0;
+      let bucketCount = 0;
+      
+      if (usageResponse.ok) {
+        const usageData = await usageResponse.json();
+        if (usageData.success && usageData.result) {
+          bucketSize = parseInt(usageData.result.payloadSize, 10) || 0;
+          bucketCount = parseInt(usageData.result.objectCount, 10) || 0;
+        }
       }
 
-      cursor = objects.cursor;
-    } while (cursor);
+      bucketStats.push({
+        name: bucketName,
+        count: bucketCount,
+        size: bucketSize,
+        sizeHuman: formatFileSize(bucketSize),
+      });
+
+      totalSize += bucketSize;
+      totalCount += bucketCount;
+    }
+
+    const storageLimit = 10 * 1024 * 1024 * 1024;
+    const usagePercent = ((totalSize / storageLimit) * 100).toFixed(2);
 
     const stats = {
-      totalImages: count,
+      totalBuckets: buckets.length,
+      totalImages: totalCount,
       totalSize: totalSize,
       totalSizeHuman: formatFileSize(totalSize),
+      storageLimit: storageLimit,
+      storageLimitHuman: formatFileSize(storageLimit),
+      usagePercent: parseFloat(usagePercent),
+      buckets: bucketStats,
       timestamp: formatTimestamp(),
     };
 
     return successResponse(stats);
   } catch (error) {
     console.error('Stats error:', error);
-    return errorResponse(500, 'STATS_FAILED', 'Failed to get stats');
+    return errorResponse(500, 'STATS_FAILED', error.message || 'Failed to get stats');
   }
 }
 
@@ -284,156 +491,137 @@ function formatFileSize(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-async function handleSyncStats(request, env) {
-  if (request.method !== 'POST') {
-    return errorResponse(405, 'METHOD_NOT_ALLOWED', 'Only POST requests are allowed');
-  }
-
-  try {
-    const accountId = env.CLOUDFLARE_ACCOUNT_ID || '';
-    const apiToken = env.CLOUDFLARE_API_TOKEN || '';
-    const bucketName = env.R2_BUCKET_NAME || 'img2url-images';
-
-    let cursor = undefined;
-    const maxIterations = 100;
-    let iterations = 0;
-    let totalSize = 0;
-    let count = 0;
-
-    while (cursor !== null && iterations < maxIterations) {
-      const url = new URL(`https://api.cloudflare.com/client/v4/accounts/${accountId}/r2/buckets/${bucketName}/objects`);
-      if (cursor) {
-        url.searchParams.set('cursor', cursor);
-      }
-      url.searchParams.set('limit', '1000');
-
-      const response = await fetch(url.toString(), {
-        headers: {
-          'Authorization': `Bearer ${apiToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      if (!data.success) {
-        throw new Error(`API error: ${data.errors[0].message}`);
-      }
-
-      for (const object of data.result.objects) {
-        totalSize += object.size || 0;
-        count++;
-      }
-
-      cursor = data.result.cursor;
-      iterations++;
-    }
-
-    const stats = {
-      totalImages: count,
-      totalSize: totalSize,
-      totalSizeHuman: formatFileSize(totalSize),
-      timestamp: formatTimestamp(),
-    };
-
-    return successResponse(stats);
-  } catch (error) {
-    console.error('Sync stats error:', error);
-    return errorResponse(500, 'SYNC_STATS_FAILED', 'Failed to sync stats');
-  }
-}
-
-async function handleHealth(request) {
+async function handleHealth(request, env) {
   if (request.method !== 'GET') {
     return errorResponse(405, 'METHOD_NOT_ALLOWED', 'Only GET requests are allowed');
   }
 
-  return successResponse({
+  const health = {
     status: 'ok',
+    code: 200,
     timestamp: formatTimestamp(),
     version: '1.0.0',
-  });
-}
+    endpoints: {},
+  };
 
-async function handlePreview(request, env) {
-  if (request.method !== 'POST') {
-    return errorResponse(405, 'METHOD_NOT_ALLOWED', 'Only POST requests are allowed');
+  let r2Ok = false;
+  try {
+    await env.IMAGES.list({ limit: 1 });
+    r2Ok = true;
+    health.endpoints.r2 = { status: 'ok', code: 200 };
+  } catch (error) {
+    health.endpoints.r2 = { status: 'error', code: 500, error: error.message };
+    health.status = 'error';
+    health.code = 500;
   }
+
+  health.endpoints.upload = r2Ok 
+    ? { status: 'ok', code: 200 } 
+    : { status: 'error', code: 503, error: 'R2 unavailable' };
+  
+  health.endpoints.file = r2Ok 
+    ? { status: 'ok', code: 200 } 
+    : { status: 'error', code: 503, error: 'R2 unavailable' };
+  
+  health.endpoints.delete = r2Ok 
+    ? { status: 'ok', code: 200 } 
+    : { status: 'error', code: 503, error: 'R2 unavailable' };
+  
+  health.endpoints.cleanup = r2Ok 
+    ? { status: 'ok', code: 200 } 
+    : { status: 'error', code: 503, error: 'R2 unavailable' };
 
   try {
-    const formData = await request.formData();
-    const file = formData.get('file');
-
-    if (!file || file.size === 0) {
-      return errorResponse(400, 'NO_FILE_PROVIDED', 'No file provided');
+    const statsResult = await handleStats(request, env);
+    const statsData = await statsResult.json();
+    if (statsData.success) {
+      health.endpoints.stats = { status: 'ok', code: 200 };
+    } else {
+      health.endpoints.stats = { status: 'error', code: 500, error: statsData.error?.message || 'Stats failed' };
+      health.status = 'error';
+      health.code = 500;
     }
-
-    if (file.size > CONSTANTS.MAX_IMAGE_SIZE) {
-      return errorResponse(413, 'FILE_TOO_LARGE', `File size exceeds ${CONSTANTS.MAX_IMAGE_SIZE / 1024 / 1024}MB limit`);
-    }
-
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif'];
-    if (!allowedTypes.includes(file.type)) {
-      return errorResponse(400, 'INVALID_FILE_TYPE', 'File type not allowed. Only JPEG, PNG, GIF, WebP, and AVIF are supported.');
-    }
-
-    const arrayBuffer = await file.arrayBuffer();
-    const blob = new Blob([arrayBuffer], { type: file.type });
-    const url = URL.createObjectURL(blob);
-
-    return successResponse({ previewUrl: url });
   } catch (error) {
-    console.error('Preview error:', error);
-    return errorResponse(500, 'PREVIEW_FAILED', 'Failed to generate preview');
+    health.endpoints.stats = { status: 'error', code: 500, error: error.message };
+    health.status = 'error';
+    health.code = 500;
   }
+
+  health.endpoints.health = { status: 'ok', code: 200 };
+
+  const accountId = env.CLOUDFLARE_ACCOUNT_ID || '';
+  const apiToken = env.CLOUDFLARE_API_TOKEN || '';
+
+  if (accountId && apiToken) {
+    try {
+      const response = await fetch('https://api.cloudflare.com/client/v4/user/tokens/verify', {
+        headers: { 'Authorization': `Bearer ${apiToken}` },
+      });
+      const data = await response.json();
+      if (data.success) {
+        health.endpoints.cloudflareApi = { status: 'ok', code: 200 };
+      } else {
+        health.endpoints.cloudflareApi = { status: 'error', code: 401, error: 'Token invalid' };
+        health.status = 'error';
+        health.code = 500;
+      }
+    } catch (error) {
+      health.endpoints.cloudflareApi = { status: 'error', code: 500, error: error.message };
+      health.status = 'error';
+      health.code = 500;
+    }
+  } else {
+    health.endpoints.cloudflareApi = { status: 'ok', code: 200 };
+  }
+
+  if (health.status === 'error') {
+    health.code = 500;
+  }
+
+  return successResponse(health);
 }
 
-// Cloudflare Pages Functions 入口 - 导出 onRequest
-export async function onRequest(context) {
-  const { request, env } = context;
+async function handleRequest(request, env, context) {
   const url = new URL(request.url);
   const path = url.pathname;
-  console.log(`[DEBUG] Request received: ${request.method} ${path}`);
 
   if (request.method === 'OPTIONS') {
-    console.log(`[DEBUG] Handling OPTIONS request for ${path}`);
     return corsResponse();
   }
 
   if (path === '/upload') {
-    console.log(`[DEBUG] Handling ${request.method} request for /upload`);
     return handleUpload(request, env);
-  } else if (path.startsWith('/i/')) {
-    const imageName = path.substring(3);
-    console.log(`[DEBUG] Handling ${request.method} request for /i/${imageName}`);
+  } else if (path.startsWith('/file/')) {
+    const imageName = path.substring(6);
     return handleImage(request, env, imageName);
   } else if (path.startsWith('/delete/')) {
     const imageName = path.substring(8);
-    console.log(`[DEBUG] Handling ${request.method} request for /delete/${imageName}`);
     return handleDelete(request, env, imageName);
   } else if (path === '/cleanup') {
-    console.log(`[DEBUG] Handling ${request.method} request for /cleanup`);
-    return handleCleanup(env);
+    return handleCleanup(request, env);
   } else if (path === '/stats') {
-    console.log(`[DEBUG] Handling ${request.method} request for /stats`);
     return handleStats(request, env);
-  } else if (path === '/sync-stats') {
-    console.log(`[DEBUG] Handling ${request.method} request for /sync-stats`);
-    return handleSyncStats(request, env);
   } else if (path === '/health') {
-    console.log(`[DEBUG] Handling ${request.method} request for /health`);
-    return handleHealth(request);
-  } else if (path === '/preview') {
-    console.log(`[DEBUG] Handling ${request.method} request for /preview`);
-    return handlePreview(request, env);
-  } else {
-    console.log(`[DEBUG] Handling ${request.method} request for ${path} (404)`);
-    return errorResponse(404, 'NOT_FOUND', 'Endpoint not found');
+    return handleHealth(request, env);
   }
+
+  if (env.ASSETS) {
+    return env.ASSETS.fetch(request);
+  }
+
+  if (context && context.next) {
+    return context.next();
+  }
+
+  return errorResponse(404, 'NOT_FOUND', 'Endpoint not found');
 }
 
+export async function onRequest(context) {
+  return handleRequest(context.request, context.env, context);
+}
 
-
+export default {
+  async fetch(request, env, ctx) {
+    return handleRequest(request, env);
+  }
+};
