@@ -8,7 +8,7 @@
     "postbuild": "node scripts/copy-functions.js",
     "preview": "vite preview",
     "deploy": "npm run build && wrangler pages deploy dist",
-    "dev:worker": "wrangler dev",
+    "dev:worker": "wrangler dev --config wrangler.local.toml",
     "dev:remote": "wrangler dev --remote"
   },
   "dependencies": {

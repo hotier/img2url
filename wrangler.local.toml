@@ -1,6 +1,6 @@
 name = "img2url"
 compatibility_date = "2024-01-01"
-pages_build_output_dir = "dist"
+main = "functions/worker.js"
 
 [assets]
 directory = "./dist"
@@ -8,3 +8,7 @@ binding = "ASSETS"
 
 [dev]
 port = 8787
+
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "img2url-images"
