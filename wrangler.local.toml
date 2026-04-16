@@ -1,6 +1,6 @@
 name = "img2url"
 compatibility_date = "2024-01-01"
-main = "functions/worker.js"
+main = "functions/[[path]].js"
 
 [assets]
 directory = "./dist"
