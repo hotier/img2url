@@ -36,6 +36,12 @@ function ApiDocs() {
               type: "file",
               required: true,
               description: "图片文件"
+            },   
+            {
+              name: "Content-Type",
+              type: "string",
+              required: true,
+              description: "文件类型"
             },
             {
               name: "expiration",
@@ -43,22 +49,16 @@ function ApiDocs() {
               required: false,
               description: "有效期天数（0=永久）"
             },
-            {
-              name: "turnstile",
-              type: "string",
-              required: false,
-              description: "Cloudflare Turnstile验证码token（高频率上传时必填）"
-            }
           ],
           response: {
             success: {
               code: 200,
               data: {
-                url: "https://img.hotier.cc.cd/i/4345c068.webp",
-                fileName: "4345c068.webp",
+                url: "https://img.hotier.cc.cd/file/4345c068",
+                fileName: "4345c068",
                 size: 1042,
                 type: "image/png",
-                timestamp: "2026-03-02 20:46:57",
+                time: "2026-03-02 20:46:57",
                 expirationTime: null,
                 expirationDays: null,
                 remainingUploads: 497

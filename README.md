@@ -87,7 +87,7 @@ Fork 本仓库到你的 GitHub 账户。
 **请求**:
 ```
 POST /upload
-Content-Type: multipart/form-data
+
 ```
 
 **参数**:
@@ -95,6 +95,7 @@ Content-Type: multipart/form-data
 | 参数 | 类型 | 必需 | 说明 |
 |------|------|------|------|
 | file | file | 是 | 图片文件 |
+| Content-Type | multipart/form-data | 是 | 文件类型 |
 | expiration | int | 否 | 过期天数，0 表示永久保存 |
 
 **示例**:
