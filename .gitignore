@@ -6,3 +6,4 @@ dist/
 .wrangler/
 *.log
 .pages/
+wrangler.local.toml
