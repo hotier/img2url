@@ -6,13 +6,14 @@ const CONSTANTS = {
 
 function formatTimestamp() {
   const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  const hours = String(now.getHours()).padStart(2, '0');
-  const minutes = String(now.getMinutes()).padStart(2, '0');
-  const seconds = String(now.getSeconds()).padStart(2, '0');
-  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+  const shanghaiTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+  const year = shanghaiTime.getFullYear();
+  const month = String(shanghaiTime.getMonth() + 1).padStart(2, '0');
+  const day = String(shanghaiTime.getDate()).padStart(2, '0');
+  const hours = String(shanghaiTime.getHours()).padStart(2, '0');
+  const minutes = String(shanghaiTime.getMinutes()).padStart(2, '0');
+  const seconds = String(shanghaiTime.getSeconds()).padStart(2, '0');
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds} (UTC+8)`;
 }
 
 function errorResponse(status, code, message) {
@@ -416,7 +417,6 @@ async function handleStats(request, env) {
     }
 
     const buckets = bucketsData.result?.buckets || [];
-    const bucketStats = [];
     let totalSize = 0;
     let totalCount = 0;
 
@@ -429,36 +429,16 @@ async function handleStats(request, env) {
         usageResponse = await fetch(usageUrl, { headers });
       } catch (fetchError) {
         console.warn(`Network error fetching usage for ${bucketName}: ${fetchError.message}`);
-        bucketStats.push({
-          name: bucketName,
-          count: 0,
-          size: 0,
-          sizeHuman: formatFileSize(0),
-          error: fetchError.message,
-        });
         continue;
       }
-      
-      let bucketSize = 0;
-      let bucketCount = 0;
       
       if (usageResponse.ok) {
         const usageData = await usageResponse.json();
         if (usageData.success && usageData.result) {
-          bucketSize = parseInt(usageData.result.payloadSize, 10) || 0;
-          bucketCount = parseInt(usageData.result.objectCount, 10) || 0;
+          totalSize += parseInt(usageData.result.payloadSize, 10) || 0;
+          totalCount += parseInt(usageData.result.objectCount, 10) || 0;
         }
       }
-
-      bucketStats.push({
-        name: bucketName,
-        count: bucketCount,
-        size: bucketSize,
-        sizeHuman: formatFileSize(bucketSize),
-      });
-
-      totalSize += bucketSize;
-      totalCount += bucketCount;
     }
 
     const storageLimit = 10 * 1024 * 1024 * 1024;
@@ -472,7 +452,6 @@ async function handleStats(request, env) {
       storageLimit: storageLimit,
       storageLimitHuman: formatFileSize(storageLimit),
       usagePercent: parseFloat(usagePercent),
-      buckets: bucketStats,
       timestamp: formatTimestamp(),
     };
 
