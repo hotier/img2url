@@ -84,13 +84,28 @@ Fork 本仓库到你的 GitHub 账户。
 
 ### 上传图片
 
+**请求**:
+```
+POST /upload
+Content-Type: multipart/form-data
+```
+
+**参数**:
+
+| 参数 | 类型 | 必需 | 说明 |
+|------|------|------|------|
+| file | file | 是 | 图片文件 |
+| expiration | int | 否 | 过期天数，0 表示永久保存 |
+
+**示例**:
 ```bash
 curl -X POST https://your-domain.com/upload \
   -H "Content-Type: multipart/form-data" \
-  -F "file=@image.jpg"
+  -F "file=@image.jpg" \
+  -F "expiration=30"
 ```
 
-响应：
+**响应**:
 ```json
 {
   "success": true,
@@ -101,18 +116,21 @@ curl -X POST https://your-domain.com/upload \
     "originalName": "image.jpg",
     "size": 102400,
     "type": "image/jpeg",
-    "time": "2026-04-16 15:30:00"
+    "time": "2026-04-16 15:30:00",
+    "expiration": 30,
+    "duplicate": false
   }
 }
 ```
 
 ### 获取统计信息
 
-```bash
-curl https://your-domain.com/stats
+**请求**:
+```
+GET /stats
 ```
 
-响应：
+**响应**:
 ```json
 {
   "success": true,
@@ -129,8 +147,26 @@ curl https://your-domain.com/stats
 
 ### 健康检查
 
-```bash
-curl https://your-domain.com/health
+**请求**:
+```
+GET /health
+```
+
+**响应**:
+```json
+{
+  "success": true,
+  "code": 200,
+  "data": {
+    "status": "ok",
+    "timestamp": "2026-04-16 15:30:00",
+    "endpoints": {
+      "r2": { "status": "ok", "code": 200 },
+      "upload": { "status": "ok", "code": 200 },
+      "stats": { "status": "ok", "code": 200 }
+    }
+  }
+}
 ```
 
 ## 本地开发
