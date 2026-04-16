@@ -1,176 +1,162 @@
-# Img2URL - 图片转URL服务
+# Img2URL
 
-基于Cloudflare R2的免费图片托管服务，支持快速上传图片生成URL，永久存储，无需注册，支持批量上传，API接口，适用于博客、论坛、社交媒体等场景。
+基于 Cloudflare R2 的免费图片托管服务，支持快速上传图片生成 URL，永久存储，无需注册。
 
-## 功能特性
+## 特点
 
-- ✅ 免费图片托管
-- ✅ 支持多种图片格式（JPG、PNG、GIF、WebP等）
-- ✅ 自动压缩图片（GIF保持原格式）
-- ✅ 支持设置图片有效期
-- ✅ 防重复上传（基于文件哈希）
-- ✅ 访问频率限制
-- ✅ 存储空间监控
-- ✅ API接口支持
-- ✅ 短链接访问
-- ✅ 定时清理过期图片
-
-## 快速开始
-
-### Cloudflare Pages 部署（推荐）
-
-```bash
-# 下载并运行部署脚本
-deploy.bat          # Windows
-deploy.sh           # macOS/Linux
-
-# 或手动部署
-npm install
-npm run build
-wrangler pages deploy dist
-```
-
-详细部署指南请查看 [Cloudflare Pages 部署文档](./CF_PAGES_DEPLOY.md)
+- **免费托管** - 基于 Cloudflare R2，无流量费用
+- **永久存储** - 图片永久保存，支持设置过期时间
+- **批量上传** - 支持拖拽、粘贴、点击选择多种上传方式
+- **短链接** - 自动生成 7 位短链接，方便分享
+- **WebP 格式** - 自动转换为 WebP 格式，节省存储空间
+- **API 支持** - 提供 RESTful API，方便集成
+- **响应式设计** - 支持桌面和移动端
+- **数据统计** - 实时显示存储用量和图片数量
 
 ## 技术栈
 
-- **前端**：React + Vite
-- **后端**：Cloudflare Workers
-- **存储**：Cloudflare R2
-- **缓存**：Cloudflare KV
+- **前端**: React + Vite + Bootstrap
+- **后端**: Cloudflare Pages Functions
+- **存储**: Cloudflare R2
+- **部署**: GitHub Actions
 
 ## 部署步骤
 
-### 1. 准备工作
+### 1. Fork 仓库
 
-1. 注册Cloudflare账号
-2. 创建R2存储桶，命名为 `img2url-images`
-3. 创建KV命名空间，用于存储元数据和统计信息
-4. 生成Cloudflare API Token，需要以下权限：
-   - Workers Scripts: Edit
-   - R2: Edit
-   - KV: Edit
-   - Pages: Edit
+Fork 本仓库到你的 GitHub 账户。
 
-### 2. 配置环境变量
+### 2. 创建 Cloudflare R2 存储桶
 
-在GitHub仓库的Settings > Secrets and variables > Actions中添加以下 secrets：
+1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)
+2. 进入 R2 页面，创建存储桶
+3. 记录存储桶名称
 
-- `CLOUDFLARE_API_TOKEN` - Cloudflare API Token
-- `CLOUDFLARE_ACCOUNT_ID` - Cloudflare账号ID
+### 3. 创建 Cloudflare API Token
 
-### 3. 自动部署
+1. 进入 [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens)
+2. 点击 "Create Token"
+3. 选择 "Custom token"
+4. 添加以下权限：
+   - `Account Settings - Read`
+   - `Workers R2 Storage - Read`
+   - `Workers R2 Storage - Edit`
+   - `Workers Scripts - Read`
+   - `Workers Scripts - Edit`
+   - `Pages - Read`
+   - `Pages - Edit`
+5. 创建并复制 Token
 
-1. 将代码推送到GitHub仓库的main分支
-2. GitHub Actions会自动执行部署流程：
-   - 安装依赖
-   - 构建前端项目
-   - 部署Worker到Cloudflare
-   - 部署前端到Cloudflare Pages
+### 4. 获取 Cloudflare Account ID
 
-### 4. 配置Worker环境变量
+在 Cloudflare Dashboard 右侧边栏找到 Account ID。
 
-在Cloudflare Workers控制台中，为worker添加以下环境变量：
+### 5. 配置 GitHub Secrets
 
-- `TURNSTILE_SECRET_KEY` - Cloudflare Turnstile密钥（可选，用于人机验证）
-- `R2_S3_ACCESS_KEY_ID` - R2 S3兼容API访问密钥
-- `R2_S3_SECRET_ACCESS_KEY` - R2 S3兼容API密钥
-- `R2_S3_ENDPOINT` - R2 S3兼容API端点
-- `R2_BUCKET_NAME` - R2存储桶名称
+进入你 Fork 的仓库 → Settings → Secrets and variables → Actions
 
-### 5. 配置自定义域名
+**添加 Secrets（机密）**:
 
-在Cloudflare Pages和Workers中配置自定义域名：
+| Name | Value |
+|------|-------|
+| `CLOUDFLARE_API_TOKEN` | 你的 Cloudflare API Token |
+| `CLOUDFLARE_ACCOUNT_ID` | 你的 Cloudflare Account ID |
 
-- 前端：`https://img.hotier.cc.cd`
-- API：`https://api.hotier.cc.cd`
+**添加 Variables（变量）**:
 
-## API文档
+| Name | Value |
+|------|-------|
+| `R2_BUCKET_NAME` | 你的 R2 存储桶名称（可选，默认 `img2url-images`） |
+
+### 6. 部署
+
+推送代码到 `main` 分支，GitHub Actions 会自动部署到 Cloudflare Pages。
+
+或者手动触发：Actions → Deploy to Cloudflare Pages → Run workflow
+
+### 7. 配置自定义域名（可选）
+
+1. 进入 Cloudflare Pages 项目
+2. Settings → Custom domains → Add domain
+3. 按提示添加域名解析
+
+## API 文档
 
 ### 上传图片
 
-**POST /upload**
-
-参数：
-- `file` - 图片文件（必填）
-- `expiration` - 有效期天数（可选，0=永久）
-- `turnstile` - Cloudflare Turnstile验证码token（高频率上传时必填）
+```bash
+curl -X POST https://your-domain.com/upload \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@image.jpg"
+```
 
 响应：
 ```json
 {
   "success": true,
-  "code": 200,
   "data": {
-    "url": "https://api.hotier.cc.cd/4345c068.webp",
-    "fileName": "4345c068.webp",
-    "size": 1042,
-    "type": "image/png",
-    "timestamp": "2026-03-02 20:46:57",
-    "expirationTime": null,
-    "expirationDays": null,
-    "remainingUploads": 497
+    "url": "https://your-domain.com/file/abc123",
+    "fileName": "abc123",
+    "originalName": "image.jpg",
+    "size": 102400,
+    "type": "image/jpeg",
+    "uploadedAt": "2026-04-16 15:30:00(CST)"
   }
 }
 ```
 
 ### 获取统计信息
 
-**GET /stats**
+```bash
+curl https://your-domain.com/stats
+```
 
 响应：
 ```json
 {
   "success": true,
   "data": {
-    "images": 100,
-    "totalSize": 1234567890,
-    "totalSizeFormatted": "1.15 GB",
-    "storageUsage": 11.5,
-    "readCount": 50000,
-    "readLimit": 1000000,
-    "readUsage": 5,
-    "limits": {
-      "storage": "10.00 GB",
-      "read": 1000000
-    },
-    "warnings": []
-  },
-  "cached": false
+    "totalImages": 100,
+    "totalSize": 314572800,
+    "totalSizeHuman": "300 MB",
+    "usagePercent": 2.93,
+    "timestamp": "2026-04-16 15:30:00(CST)"
+  }
 }
+```
+
+### 健康检查
+
+```bash
+curl https://your-domain.com/health
 ```
 
 ## 本地开发
 
-### 启动开发服务器
-
 ```bash
+# 安装依赖
+npm install
+
+# 创建本地配置
+cp wrangler.toml wrangler.local.toml
+# 编辑 wrangler.local.toml，配置你的 R2 存储桶
+
+# 创建环境变量
+cp .env.example .dev.vars
+# 编辑 .dev.vars，填入你的 Cloudflare API Token 和 Account ID
+
+# 启动开发服务器
 npm run dev
 ```
 
-### 构建生产版本
+## 环境变量
 
-```bash
-npm run deploy:client  # 构建前端
-npm run deploy:worker  # 部署worker
-```
-
-## 限制说明
-
-- 单个文件大小限制：10MB
-- 图片尺寸限制：10000x10000
-- 每日上传限制：500次/IP
-- 每分钟上传限制：30次/IP
-- 每分钟读取限制：100次/IP
-- 总存储空间限制：10GB
-- 每日读取限制：100万次
-
-## 注意事项
-
-1. 请遵守相关法律法规，不要上传违法违规内容
-2. 大文件上传可能会比较慢，请耐心等待
-3. 存储空间达到90%时会暂停上传服务
-4. 高频率上传需要进行人机验证
+| 变量名 | 说明 | 必需 |
+|--------|------|------|
+| `CLOUDFLARE_API_TOKEN` | Cloudflare API Token | 是 |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare Account ID | 是 |
+| `TURNSTILE_SECRET_KEY` | Turnstile 验证密钥 | 否 |
+| `CUSTOM_DOMAIN` | 自定义域名 | 否 |
 
 ## 许可证
 

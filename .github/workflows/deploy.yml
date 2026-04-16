@@ -23,6 +23,7 @@ env:
   NODE_VERSION: '20'
   CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
   CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+  R2_BUCKET_NAME: ${{ vars.R2_BUCKET_NAME || 'img2url-images' }}
 
 jobs:
   build-and-deploy:
@@ -48,33 +49,11 @@ jobs:
       - name: Prepare Functions directory
         run: cp -r functions/. dist/functions/
 
-      - name: Remove old R2 binding via API
-        env:
-          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Configure R2 bucket name
         run: |
-          # 获取当前部署配置
-          RESPONSE=$(curl -s -X GET \
-            "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/pages/projects/img2url" \
-            -H "Authorization: Bearer $CF_API_TOKEN" \
-            -H "Content-Type: application/json")
-          
-          echo "Current project config: $RESPONSE"
-          
-          # 提取 deployment_configs.production
-          PRODUCTION_CONFIG=$(echo "$RESPONSE" | jq -r '.result.deployment_configs.production // {}')
-          
-          # 移除 R2 绑定中的 IMAGES
-          NEW_CONFIG=$(echo "$PRODUCTION_CONFIG" | jq 'del(.r2_buckets.IMAGES) // .')
-          
-          echo "New config: $NEW_CONFIG"
-          
-          # 更新项目配置
-          curl -s -X PATCH \
-            "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/pages/projects/img2url" \
-            -H "Authorization: Bearer $CF_API_TOKEN" \
-            -H "Content-Type: application/json" \
-            --data "{\"deployment_configs\":{\"production\":$NEW_CONFIG}}"
+          sed -i "s/bucket_name = \"img2url-images\"/bucket_name = \"${{ env.R2_BUCKET_NAME }}\"/g" wrangler.toml
+          echo "Updated wrangler.toml with bucket name: ${{ env.R2_BUCKET_NAME }}"
+          cat wrangler.toml
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/pages-action@v1
