@@ -2,8 +2,5 @@ name = "img2url"
 compatibility_date = "2024-01-01"
 pages_build_output_dir = "dist"
 
-[vars]
-R2_BUCKET_NAME = "img2url-images"
-
 [dev]
 port = 8787
