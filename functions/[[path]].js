@@ -13,7 +13,7 @@ function formatTimestamp() {
   const hours = String(shanghaiTime.getHours()).padStart(2, '0');
   const minutes = String(shanghaiTime.getMinutes()).padStart(2, '0');
   const seconds = String(shanghaiTime.getSeconds()).padStart(2, '0');
-  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}(CST)`;
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 }
 
 function errorResponse(status, code, message) {
@@ -34,6 +34,7 @@ function errorResponse(status, code, message) {
 function successResponse(data, status = 200) {
   return new Response(JSON.stringify({ 
     success: true, 
+    code: status,
     data 
   }), {
     status,
@@ -205,7 +206,7 @@ async function handleUpload(request, env) {
       const mapping = JSON.parse(mappingText);
       const baseUrl = env.CUSTOM_DOMAIN || new URL(request.url).origin;
       const existingUrl = `${baseUrl}/file/${mapping.shortId}`;
-      const uploadedAt = mapping.uploadedAt ? formatTimestamp(new Date(mapping.uploadedAt)) : formatTimestamp();
+      const time = mapping.uploadedAt ? formatTimestamp(new Date(mapping.uploadedAt)) : formatTimestamp();
       return successResponse({
         url: existingUrl,
         fileName: mapping.shortId,
@@ -216,7 +217,7 @@ async function handleUpload(request, env) {
         expiration: 0,
         expirationDays: 0,
         duplicate: true,
-        uploadedAt: uploadedAt
+        time: time
       });
     }
 
@@ -262,7 +263,7 @@ async function handleUpload(request, env) {
       originalName: originalName,
       size: file.size,
       type: file.type,
-      uploadedAt: formatTimestamp(),
+      time: formatTimestamp(),
       expiration: expirationDays,
       expirationDays: expirationDays,
       duplicate: false,
