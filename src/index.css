@@ -1310,23 +1310,25 @@ input:checked + .toggle::after {
 }
 
 .history-delete {
-  position: absolute;
-  top: 50%;
-  right: 8px;
-  transform: translateY(-50%);
-  padding: 4px;
-  background: white;
+  padding: 2px 6px;
+  background: #fee2e2;
   border: none;
-  color: #94a3b8;
+  color: #ef4444;
   cursor: pointer;
   transition: all 0.2s ease;
-  z-index: 10;
-  border-radius: 6px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.history-delete i {
+  font-size: 10px;
 }
 
 .history-delete:hover {
-  color: #ef4444;
-  background: white;
+  background: #fecaca;
+  color: #dc2626;
 }
 
 /* 底部状态栏 */
@@ -1641,12 +1643,8 @@ input:checked + .toggle::after {
     font-size: 10px;
   }
 
-  .history-delete {
-    position: absolute;
-    top: 50%;
-    right: 4px;
-    transform: translateY(-50%);
-    padding: 3px;
+  .history-delete i {
+    font-size: 9px;
   }
 
   .status-bar {
@@ -2038,12 +2036,8 @@ input:checked + .toggle::after {
     font-size: 9px;
   }
 
-  .history-delete {
-    position: absolute;
-    top: 50%;
-    right: 4px;
-    transform: translateY(-50%);
-    padding: 2px;
+  .history-delete i {
+    font-size: 8px;
   }
 
   .status-bar {

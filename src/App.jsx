@@ -915,9 +915,6 @@ function App() {
             <div className="history-list">
               {uploadedImages.map((img, index) => (
                 <div key={index} className={`history-item ${img.duplicate ? 'duplicate' : ''}`}>
-                  <button className="history-delete" onClick={() => deleteImage(index)} title="删除">
-                    <i className="bi bi-trash"></i>
-                  </button>
                   <img src={img.url} alt="" className="history-thumb" />
                   <div className="history-info">
                     <div className="history-row">
@@ -927,6 +924,9 @@ function App() {
                         <span className="meta-badge">{getExpirationText(img.expirationDays)}</span>
                         {img.duplicate && <span className="meta-badge duplicate-badge">重复</span>}
                         {img.uploadCount > 1 && <span className="meta-badge count-badge">{img.uploadCount}次</span>}
+                        <button className="history-delete" onClick={() => deleteImage(index)} title="删除">
+                          <i className="bi bi-trash"></i>
+                        </button>
                       </div>
                     </div>
                     <div className="history-url">
